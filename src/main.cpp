@@ -106,10 +106,6 @@ void loop() {
   Serial.print(g.gyro.z);
   Serial.println(" rad/s");
 
-  Serial.print("Temperature: ");
-  Serial.print(temp.temperature);
-  Serial.println(" degC");
-
   Serial.println("");
   delay(500);
 }
