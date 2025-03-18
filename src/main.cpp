@@ -3,16 +3,14 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+#define SAMPLING_DELAY_MS 50
 Adafruit_MPU6050 mpu;
 
 void
 setup(void) {
-    Serial.begin(9000);
-    while (!Serial) {
-        delay(10); // will pause Zero, Leonardo, etc until serial console opens
-    }
+    Serial.begin(115200);
 
-    Serial.println("Adafruit MPU6050 test!");
+    Serial.println("Write info for your project here e.g. version, author, etc.");
 
     // Try to initialize!
     if (!mpu.begin()) {
@@ -23,7 +21,7 @@ setup(void) {
     }
     Serial.println("MPU6050 Found!");
 
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G); /* ToDo what are these? */
     Serial.print("Accelerometer range set to: ");
     switch (mpu.getAccelerometerRange()) {
         case MPU6050_RANGE_2_G: Serial.println("+-2G"); break;
@@ -31,7 +29,8 @@ setup(void) {
         case MPU6050_RANGE_8_G: Serial.println("+-8G"); break;
         case MPU6050_RANGE_16_G: Serial.println("+-16G"); break;
     }
-    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+
+    mpu.setGyroRange(MPU6050_RANGE_500_DEG); /* ToDo what are these? */
     Serial.print("Gyro range set to: ");
     switch (mpu.getGyroRange()) {
         case MPU6050_RANGE_250_DEG: Serial.println("+- 250 deg/s"); break;
@@ -40,7 +39,7 @@ setup(void) {
         case MPU6050_RANGE_2000_DEG: Serial.println("+- 2000 deg/s"); break;
     }
 
-    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
+    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ); /* ToDo what are these? */
     Serial.print("Filter bandwidth set to: ");
     switch (mpu.getFilterBandwidth()) {
         case MPU6050_BAND_260_HZ: Serial.println("260 Hz"); break;
@@ -58,28 +57,10 @@ setup(void) {
 
 void
 loop() {
-    /* Get new sensor events with the readings */
     sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
+    mpu.getEvent(&a, &g, &temp); /* Acceleration is m/s^2, gyro data is rad/s */
+    Serial.printf("\n%lu, .3%f, .3%f, .3%f, .3%f, .3%f, .3%f\n", millis(), a.acceleration.x, a.acceleration.y,
+                  a.acceleration.z, g.gyro.x, g.gyro.y, g.gyro.z);
 
-    /* Print out the values */
-    Serial.print("Acceleration X: ");
-    Serial.print(a.acceleration.x);
-    Serial.print(", Y: ");
-    Serial.print(a.acceleration.y);
-    Serial.print(", Z: ");
-    Serial.print(a.acceleration.z);
-    Serial.println(" m/s^2");
-
-    Serial.print("Rotation X: ");
-    Serial.print(g.gyro.x);
-    Serial.print(", Y: ");
-    Serial.print(g.gyro.y);
-    Serial.print(", Z: ");
-    Serial.print(g.gyro.z);
-    Serial.println(" rad/s");
-
-    Serial.println("");
-    delay(50);
-    /* a test change from me */
+    delay(SAMPLING_DELAY_MS);
 }
