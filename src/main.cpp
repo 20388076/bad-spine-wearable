@@ -8,7 +8,7 @@
 
 int position = 85;              // Start at 85 degrees
 int randomMoves = 10;           // Number of random movements
-int senario = 2;                // Senario of expirament
+int senario = 3;                // Senario of expirament
 static const int servoPin = 25; // Connect servo to pin 25 or D2
 unsigned long previousMillis = 0;
 int new_position = 0;         // New position for servo motor
@@ -61,8 +61,8 @@ Task2code(void* pvParameters) {
                 new_position = last_position - step; // Decrease position by step in degrees
                 myServo.write(new_position);         // Move the servo
                 last_position = new_position;        // Update last position
-                int ticks = 60000;                   // Wait 1 minute (60,000 milliseconds)
-                vTaskDelay(pdMS_TO_TICKS(ticks));    // Wait 1 minute (60,000 milliseconds)
+                int ticks = 90000;
+                vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait 1 minute (90,000 milliseconds)
             }
         }
     }
