@@ -143,5 +143,5 @@ setup() {
 
 void
 loop() {}
-// Nothing to do here, everything is done in the tasks trying  to connect to gihub
-// and push the code to the repository
+
+// evaluate the senario of the experiment
