@@ -6,14 +6,15 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-int position = 85;              // Start at 85 degrees
+int initial_position = 85;      // Start at 85 degrees
+int min_position = 45;          // Minimum position of servo motor
 int randomMoves = 10;           // Number of random movements
 int senario = 3;                // Senario of expirament
 static const int servoPin = 25; // Connect servo to pin 25 or D2
 unsigned long previousMillis = 0;
-int new_position = 0;         // New position for servo motor
-int last_position = position; // Last position of servo motor
-int step = 1;                 // Factor to decrease position by 1 degree
+int new_position = 0;                 // New position for servo motor
+int last_position = initial_position; // Last position of servo motor
+int step = 1;                         // Factor to decrease position by 1 degree per minute
 
 Adafruit_MPU6050 mpu;
 Servo myServo;
@@ -48,21 +49,24 @@ Task2code(void* pvParameters) {
             if (currentMillis - previousMillis >= interval) {
                 previousMillis = currentMillis; // Reset timer only after execution
                 int newAngle = random(0, 21);   // Random angle between 0 and 20
-                int tempPosition = position + newAngle;
+                int tempPosition = initial_position + newAngle;
                 myServo.write(tempPosition);      // Move to random position
                 int ticks = random(900, 4000);    // Wait random from 900 ms -2 seconds
                 vTaskDelay(pdMS_TO_TICKS(ticks)); // **Use vTaskDelay instead of delay()**
-                myServo.write(position);          // Return to the last known position
+                myServo.write(initial_position);  // Return to the last known position
             }
         }
 
-        else if (senario == 3) { // Moning gradually from 105° to 45° (1° per minute)
-            if (last_position > 45) {
-                new_position = last_position - step; // Decrease position by step in degrees
+        else if (senario == 3) { // Moning gradually from 85° to 45°
+            if (last_position > min_position) {
+                new_position = last_position - step; // Decrease position by step degrees
                 myServo.write(new_position);         // Move the servo
                 last_position = new_position;        // Update last position
-                int ticks = 90000;
-                vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait 1 minute (90,000 milliseconds)
+                int ticks =
+                    3600000 * step
+                    / (initial_position
+                       - min_position); // Calculate time in ms to wait, 1 hour for 40 degrees multiplied by step
+                vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait milliseconds per step value
             }
         }
     }
@@ -72,9 +76,9 @@ Task2code(void* pvParameters) {
 void
 setup() {
     Serial.begin(115200);
-    myServo.attach(servoPin);   // Attach servo to pin 26
-    myServo.write(position);    // Set initial position
-    randomSeed(analogRead(A0)); // Seed signals from port for random numbers
+    myServo.attach(servoPin);        // Attach servo to pin 26
+    myServo.write(initial_position); // Set initial position
+    randomSeed(analogRead(A0));      // Seed signals from port for random numbers
     Serial.begin(115200);
 
     Serial.println("Wearable Posture Detection System, version:, author: ACHILLIOS PITTSILKAS");
