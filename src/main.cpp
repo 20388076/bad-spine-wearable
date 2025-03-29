@@ -14,7 +14,7 @@ static const int servoPin = 25; // Connect servo to pin 25 or D2
 unsigned long previousMillis = 0;
 int new_position = 0;                 // New position for servo motor
 int last_position = initial_position; // Last position of servo motor
-int step = 1;                         // Factor to decrease position by 1 degree per minute
+int step = 1;                         // Factor to decrease position by degrees per miniute
 
 Adafruit_MPU6050 mpu;
 Servo myServo;
@@ -59,13 +59,10 @@ Task2code(void* pvParameters) {
 
         else if (senario == 3) { // Moning gradually from 85° to 45°
             if (last_position > min_position) {
-                new_position = last_position - step; // Decrease position by step degrees
-                myServo.write(new_position);         // Move the servo
-                last_position = new_position;        // Update last position
-                int ticks =
-                    3600000 * step
-                    / (initial_position
-                       - min_position); // Calculate time in ms to wait, 1 hour for 40 degrees multiplied by step
+                new_position = last_position - 1; // Decrease position by 1 degree
+                myServo.write(new_position);      // Move the servo
+                last_position = new_position;     // Update last position
+                int ticks = 60000 / step;         // Calculate time in ms to wait per step
                 vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait milliseconds per step value
             }
         }
