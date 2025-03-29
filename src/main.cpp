@@ -14,7 +14,8 @@ static const int servoPin = 25; // Connect servo to pin 25 or D2
 unsigned long previousMillis = 0;
 int new_position = 0;                 // New position for servo motor
 int last_position = initial_position; // Last position of servo motor
-int step = 1;                         // Factor to decrease position by degrees per miniute
+int step = 3;                         // Factor to decrease position by degrees per miniute
+int anomaly = 1;                      // Anomaly detection flag
 
 Adafruit_MPU6050 mpu;
 Servo myServo;
@@ -64,6 +65,17 @@ Task2code(void* pvParameters) {
                 last_position = new_position;     // Update last position
                 int ticks = 60000 / step;         // Calculate time in ms to wait per step
                 vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait milliseconds per step value
+                if (anomaly == 1) {
+                    if (currentMillis - previousMillis >= interval) {
+                        previousMillis = currentMillis; // Reset timer only after execution
+                        int newAngle = random(0, 21);   // Random angle between 0 and 20
+                        int tempPosition = last_position + newAngle;
+                        myServo.write(tempPosition);      // Move to random position
+                        int ticks = random(900, 4000);    // Wait random from 900 ms -2 seconds
+                        vTaskDelay(pdMS_TO_TICKS(ticks)); // **Use vTaskDelay instead of delay()**
+                        myServo.write(initial_position);  // Return to the last known position
+                    }
+                }
             }
         }
     }
