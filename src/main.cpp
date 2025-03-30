@@ -74,6 +74,7 @@ Task2code(void* pvParameters) {
                         int ticks = random(900, 4000);    // Wait random from 900 ms -2 seconds
                         vTaskDelay(pdMS_TO_TICKS(ticks)); // **Use vTaskDelay instead of delay()**
                         myServo.write(initial_position);  // Return to the last known position
+                        last_position = initial_position; // Reset last position to initial position
                     }
                 }
             }
