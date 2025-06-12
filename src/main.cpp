@@ -3,37 +3,197 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
 #include <Wire.h>
+#include "DecisionTree.h"
+#include "ESP_fft.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-int initial_position = 85;      // Start at 85 degrees
-int min_position = 45;          // Minimum position of servo motor
-int randomMoves = 10;           // Number of random movements
-int senario = 3;                // Senario of expirament
-static const int servoPin = 25; // Connect servo to pin 25 or D2
-unsigned long previousMillis = 0;
-int new_position = 0;                 // New position for servo motor
-int last_position = initial_position; // Last position of servo motor
-int step = 3;                         // Factor to decrease position by degrees per miniute
-int anomaly = 1;                      // Anomaly detection flag
+using namespace Eloquent::ML::Port;
 
 Adafruit_MPU6050 mpu;
 Servo myServo;
-
+DecisionTree model;
 TaskFunction_t Task1code1;
 TaskFunction_t Task1code2;
 TaskHandle_t Task1;
 TaskHandle_t Task2;
+#define FFT_SIZE 32
+ESP_fft fft(FFT_REAL, FFT_SIZE, 400); // Correct FFT initialization
+
+// Declare predict function if not already declared in DecisionTree.h
+// extern "C" int predict(float* input_buffer);
+
+// This code is for a wearable posture detection system using an ESP32, MPU6050 sensor, and a servo motor.
+// Varables Initialization
+
+int initial_position = 85;      // Start at 85 degrees
+int min_position = 45;          // Minimum position of servo motor
+int randomMoves = 10;           // Number of random movements
+int senario = 3;                // Senario of expirament 1-3
+static const int servoPin = 25; // Connect servo to pin 25 or D2
+unsigned long previousMillis = 0;
+int new_position = 0;                 // New position for servo motor
+int last_position = initial_position; // Last position of servo motor
+int step = 1;                         // Factor to decrease position by degrees per miniute
+int anomaly = 0;                      // Anomaly detection flag
+
+float input_buffer[180 + 10]; // 180 raw + 10 features
+int sample_index = 0;
+
+float gyro_y_data[30], gyro_z_data[30], acc_x_data[30], gyro_x_data[30], acc_z_data[30];
+
+// Features extraction functions
+
+float
+compute_energy(float* data, int len) {
+    float sum = 0;
+    for (int i = 0; i < len; i++) {
+        sum += data[i] * data[i];
+    }
+    return sum / len;
+}
+
+float
+window_max(float* data, int len) {
+    float max_val = data[0];
+    for (int i = 1; i < len; i++) {
+        if (data[i] > max_val) {
+            max_val = data[i];
+        }
+    }
+    return max_val;
+}
+
+float
+window_mean(float* data, int len) {
+    float sum = 0;
+    for (int i = 0; i < len; i++) {
+        sum += data[i];
+    }
+    return sum / len;
+}
+
+float
+window_min(float* data, int len) {
+    float min_val = data[0];
+    for (int i = 1; i < len; i++) {
+        if (data[i] < min_val) {
+            min_val = data[i];
+        }
+    }
+    return min_val;
+}
+
+float
+compute_mad(float* data, int len) {
+    float mean = window_mean(data, len);
+    float sum = 0;
+    for (int i = 0; i < len; i++) {
+        sum += fabs(data[i] - mean);
+    }
+    return sum / len;
+}
+
+float
+compute_iqr(float* data, int len) {
+    std::sort(data, data + len);
+    float q1 = data[len / 4];
+    float q3 = data[3 * len / 4];
+    return q3 - q1;
+}
 
 //Task1code: getting data from MPU6050
 void
 Task1code(void* pvParameters) {
     for (;;) {
         sensors_event_t a, g, temp;
-        mpu.getEvent(&a, &g, &temp); /* Acceleration is m/s^2, gyro data is rad/s */
+        mpu.getEvent(&a, &g, &temp);
+
+        input_buffer[sample_index * 6 + 0] = a.acceleration.x;
+        input_buffer[sample_index * 6 + 1] = a.acceleration.y;
+        input_buffer[sample_index * 6 + 2] = a.acceleration.z;
+        input_buffer[sample_index * 6 + 3] = g.gyro.x;
+        input_buffer[sample_index * 6 + 4] = g.gyro.y;
+        input_buffer[sample_index * 6 + 5] = g.gyro.z;
+
+        acc_x_data[sample_index] = a.acceleration.x;
+        acc_z_data[sample_index] = a.acceleration.z;
+        gyro_x_data[sample_index] = g.gyro.x;
+        gyro_y_data[sample_index] = g.gyro.y;
+        gyro_z_data[sample_index] = g.gyro.z;
+
+        sample_index++;
+
+        if (sample_index == 30) {
+            int idx = 180;
+
+            input_buffer[idx++] = compute_energy(gyro_y_data, 30); // ENERGY_gyro y
+            input_buffer[idx++] = window_max(gyro_z_data, 30);     // gyro_z_window_max
+            input_buffer[idx++] = compute_mad(acc_x_data, 30);     // MAD_acceleration x
+            input_buffer[idx++] = compute_mad(gyro_y_data, 30);    // MAD_gyro y
+
+            // === FFT Feature: FFT_gyro y ===
+            for (int i = 0; i < FFT_SIZE; i++) {
+                fft.real[i] = (i < 30) ? gyro_y_data[i] : 0; // zero padding
+                fft.imag[i] = 0;
+            }
+            fft.Windowing(FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+            fft.Compute(FFT_FORWARD);
+            fft.ComplexToMagnitude();
+            float fft_sum = 0;
+            for (int i = 1; i < 15; i++) {
+                fft_sum += fft.magn[i];
+            }
+            input_buffer[idx++] = fft_sum;
+
+            input_buffer[idx++] = window_mean(gyro_y_data, 30); // gyro_y_window_mean
+            input_buffer[idx++] = compute_iqr(gyro_x_data, 30); // IQR_gyro x
+            input_buffer[idx++] = window_min(gyro_x_data, 30);  // gyro_x_window_min
+            input_buffer[idx++] = compute_mad(gyro_x_data, 30); // MAD_gyro x
+            input_buffer[idx++] = compute_iqr(acc_z_data, 30);  // IQR_acceleration z
+
+            // === Print input_buffer for Debugging ===
+            Serial.println("\n=== input_buffer ===");
+            for (int i = 0; i < idx; i++) {
+                Serial.printf("%.3f, ", input_buffer[i]);
+                if ((i + 1) % 6 == 0) {
+                    Serial.println();
+                }
+            }
+
+            int result = model.predict(input_buffer);
+            Serial.printf("\nPrediction result: %d\n", result);
+
+            sample_index = 0;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+
+        /*
+        sensors_event_t a, g, temp;
+        mpu.getEvent(&a, &g, &temp); // Acceleration is m/s^2, gyro data is rad/s //
+
+        // Flatten and store into input_buffer
+        input_buffer[sample_index * 6 + 0] = a.acceleration.x;
+        input_buffer[sample_index * 6 + 1] = a.acceleration.y;
+        input_buffer[sample_index * 6 + 2] = a.acceleration.z;
+        input_buffer[sample_index * 6 + 3] = g.gyro.x;
+        input_buffer[sample_index * 6 + 4] = g.gyro.y;
+        input_buffer[sample_index * 6 + 5] = g.gyro.z;
+
         Serial.printf("\n%lu, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f", millis(), a.acceleration.x, a.acceleration.y,
                       a.acceleration.z, g.gyro.x, g.gyro.y, g.gyro.z);
+        
+        sample_index++;
+
+        // If 30 samples collected, run inference
+        if (sample_index == 30) {
+            int result = model.predict(input_buffer);
+            Serial.printf("\nPrediction result: %d\n", result);
+            sample_index = 0;  // Reset for next 30 samples
+        }
         vTaskDelay(pdMS_TO_TICKS(100));
+        */
     }
 }
 
@@ -49,10 +209,10 @@ Task2code(void* pvParameters) {
         } else if (senario == 2) {
             if (currentMillis - previousMillis >= interval) {
                 previousMillis = currentMillis; // Reset timer only after execution
-                int newAngle = random(0, 21);   // Random angle between 0 and 20
+                int newAngle = random(0, 21);   // Random angle between 0 and 20 degrees
                 int tempPosition = initial_position + newAngle;
                 myServo.write(tempPosition);      // Move to random position
-                int ticks = random(900, 4000);    // Wait random from 900 ms -2 seconds
+                int ticks = random(900, 4000);    // Wait random from 900 ms - 2 seconds
                 vTaskDelay(pdMS_TO_TICKS(ticks)); // **Use vTaskDelay instead of delay()**
                 myServo.write(initial_position);  // Return to the last known position
             }
@@ -65,13 +225,19 @@ Task2code(void* pvParameters) {
                 last_position = new_position;     // Update last position
                 int ticks = 60000 / step;         // Calculate time in ms to wait per step
                 vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait milliseconds per step value
+
+                if (last_position == min_position) {
+                    last_position = initial_position; // Reset last position to initial position
+                    myServo.write(initial_position);  // Return to the last known position
+                }
+
                 if (anomaly == 1) {
                     if (currentMillis - previousMillis >= interval) {
                         previousMillis = currentMillis; // Reset timer only after execution
-                        int newAngle = random(0, 21);   // Random angle between 0 and 20
+                        int newAngle = random(0, 21);   // Random angle between 0 and 20 degrees
                         int tempPosition = last_position + newAngle;
                         myServo.write(tempPosition);      // Move to random position
-                        int ticks = random(900, 4000);    // Wait random from 900 ms -2 seconds
+                        int ticks = random(900, 4000);    // Wait random from 900 ms - 2 seconds
                         vTaskDelay(pdMS_TO_TICKS(ticks)); // **Use vTaskDelay instead of delay()**
                         myServo.write(initial_position);  // Return to the last known position
                         last_position = initial_position; // Reset last position to initial position
@@ -157,5 +323,3 @@ setup() {
 
 void
 loop() {}
-
-// evaluate the senario of the experiment

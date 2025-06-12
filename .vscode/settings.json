@@ -48,7 +48,8 @@
         "condition_variable": "cpp",
         "compare": "cpp",
         "concepts": "cpp",
-        "algorithm": "cpp"
+        "algorithm": "cpp",
+        "cstdarg": "cpp"
     },
     "C_Cpp.default.compilerPath": "C:\\win-builds\\bin\\gcc.exe"
 }
