@@ -18,7 +18,7 @@ TaskFunction_t Task1code2;
 TaskHandle_t Task1;
 TaskHandle_t Task2;
 #define FFT_SIZE 32
-// ESP_fft fft(FFT_REAL, FFT_SIZE, 400); // Correct FFT initialization
+ESP_fft fft(FFT_REAL, FFT_SIZE, 400); // Correct FFT initialization
 
 // Declare predict function if not already declared in DecisionTree.h
 // extern "C" int predict(float* input_buffer);
