@@ -169,7 +169,18 @@ def loadData(path, files, index):
         column_indices = [76, 32, 42, 46, 70, 28, 63, 27, 45, 62]
         Xn = X[:, column_indices]
         tag ='RELIFF FEATURES 10 Best'
-
+        '''
+        0:Index 76: ENERGY_gyro y
+        1:Index 32: gyro_z_window_max
+        2:Index 42: MAD_acceleration x
+        3:Index 46: MAD_gyro y
+        4:Index 70: FFT_gyro y
+        5:Index 28: gyro_y_window_mean
+        6:Index 63: IQR_gyro x
+        7:ndex 27: gyro_x_window_min
+        8:Index 45: MAD_gyro x
+        9:Index 62: IQR_acceleration z
+        '''
     return Xn, y, np.array(fNames), tag
 
     
@@ -204,6 +215,7 @@ files = ['x_axis_with _random_movements_feat.csv',
          'z_anomaly_detection_3dpersec_feat.csv',
     ]
 path = './FEATS/'
+
 for choice in range(0,2):
     for index in range(0,3):
         X, y, fNames, Data_tag = loadData(path, files, index)
@@ -219,7 +231,6 @@ for choice in range(0,2):
         print(fNames)
         '''
         #============================== TRAIN/TEST SPLIT ==============================
-    
     
         def TrainTestSplit(X, y, train_size, test_size):
     
@@ -251,7 +262,7 @@ for choice in range(0,2):
         #================================ CLASSIFICATION ==============================
         
         import time
-        search = 0
+        search = 2
         
         if search == 0:
             
@@ -274,44 +285,40 @@ for choice in range(0,2):
             
             start = time.time()
             classifier, classifier_name = classifiers(choice)
-            model = classifier.fit(X_train, y_train)
-            y_pred = classifier.predict(X_test)
+            classifier = classifier.fit(X_train, y_train)
             end = time.time()
             classification_time = end-start
-
+            y_pred = classifier.predict(X_test)
             
         elif search == 1: # Hyperparameters Tuning
         
             def classifiers(choice):
-                if choice == 0: # Nearest Centroid
-                    from sklearn.neighbors import KNeighborsClassifier
-                    return KNeighborsClassifier(), 'KNN'
+                #if choice == 0: # Nearest Centroid
+                    #from sklearn.neighbors import KNeighborsClassifier
+                    #return KNeighborsClassifier(), 'KNN'
                     
-                elif choice == 1: # Decision Tree 
+                if choice == 0: # Decision Tree 
                     from sklearn.tree import DecisionTreeClassifier  # Import Decision Tree Classifier
                     return DecisionTreeClassifier(), 'DecisionTree'
                     
-                elif choice == 2: # Random Forest 
+                elif choice == 1: # Random Forest 
                     from sklearn.ensemble import RandomForestClassifier
                     return RandomForestClassifier(), 'RandomForest'     
                     
-                elif choice == 3: # eXtreme Gradient Boosting
-                    from xgboost import XGBClassifier
-                    return XGBClassifier(use_label_encoder=False, eval_metric='mlogloss'), 'XGBoost'
+                #elif choice == 3: # eXtreme Gradient Boosting
+                    #from xgboost import XGBClassifier
+                    #return XGBClassifier(use_label_encoder=False, eval_metric='mlogloss'), 'XGBoost'
             
             start = time.time()
             classifier, classifier_name = classifiers(choice)
-            y_pred = classifier.fit(X_train, y_train).predict(X_test)
+            classifier = classifier.fit(X_train, y_train)
             end = time.time()
             classification_time = end-start
+            y_pred = classifier.predict(X_test)
             
             # Define parameter grids
             param_grids = {
-                'KNN': {
-                    'n_neighbors': [3, 5, 7, 9],
-                    'weights': ['uniform', 'distance'],
-                    'metric': ['euclidean', 'manhattan']
-                },
+                #'KNN': {'n_neighbors': [3, 5, 7, 9],'weights': ['uniform', 'distance'],'metric': ['euclidean', 'manhattan']},
                 'DecisionTree': {
                     'max_depth': [None, 5, 10, 20],
                     'min_samples_split': [2, 5, 10]
@@ -321,20 +328,12 @@ for choice in range(0,2):
                     'max_depth': [None, 10, 20],
                     'min_samples_split': [2, 5]
                 },
-                'XGBoost': {
-                    'n_estimators': [50, 100, 200, 300],
-                    'max_depth': [3, 5, 7, 10],
-                    'learning_rate': [0.01, 0.1, 0.3, 1]
-                }
+                #'XGBoost': {'n_estimators': [50, 100, 200, 300],'max_depth': [3, 5, 7, 10],'learning_rate': [0.01, 0.1, 0.3, 1]}
             }
             
             # Parameter distributions for RandomizedSearchCV
             param_dists = {
-                'KNN': {
-                    'n_neighbors': randint(3, 15),
-                    'weights': ['uniform', 'distance'],
-                    'metric': ['euclidean', 'manhattan']
-                },
+                #KNN': {'n_neighbors': randint(3, 15),'weights': ['uniform', 'distance'],'metric': ['euclidean', 'manhattan']},
                 'DecisionTree': {
                     'max_depth': randint(3, 20),
                     'min_samples_split': randint(2, 10)
@@ -343,12 +342,8 @@ for choice in range(0,2):
                     'n_estimators': randint(50, 200),
                     'max_depth': randint(3, 20),
                     'min_samples_split': randint(2, 10)
-                },
-                'XGBoost': {
-                    'n_estimators': randint(50, 300),
-                    'max_depth': randint(3, 10),
-                    'learning_rate': uniform(0.01, 1)
                 }
+                #XGBoost': {'n_estimators': randint(50, 300),'max_depth': randint(3, 10),'learning_rate': uniform(0.01, 1)}
             }
             
             from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
@@ -366,7 +361,7 @@ for choice in range(0,2):
             best_cv_score = search.best_score_
             
             # Save parameters
-            filename = f"best_params_{classifier_name}_{Data_tag}.json"
+            filename = f"best_params_{classifier_name}_{Data_tag.replace(' ', '_')}.json"
             with open(filename, "w") as f:
                 json.dump(best_params, f)
         
@@ -391,64 +386,53 @@ for choice in range(0,2):
                 print(f"   Test Accuracy: {s['Test Accuracy']}")
                 print(f"   Best Params  : {s['Best Params']}")
                 print(f"   Saved To     : {s['Saved As']}")
-                
-        elif search == 3: # Hyperparameters Tuning
-        
-            def load_classifier(name, params):
-                if name == 'KNN':
-                    from sklearn.neighbors import KNeighborsClassifier
-                    return KNeighborsClassifier(**params)
-                elif name == 'DecisionTree':
+        elif search == 2:
+            
+            if choice == 0:
+                classifier_name = 'DecisionTree'
+            elif choice == 1:  
+                classifier_name = 'RandomForest'
+            
+            def load_classifier(choice, params):
+
+                if choice == 0:
                     from sklearn.tree import DecisionTreeClassifier
                     return DecisionTreeClassifier(**params)
-                elif name == 'RandomForest':
+                elif choice == 1:
                     from sklearn.ensemble import RandomForestClassifier
                     return RandomForestClassifier(**params)
-                elif name == 'XGBoost':
-                    from xgboost import XGBClassifier
-                    return XGBClassifier(use_label_encoder=False, eval_metric='mlogloss', **params)
+            
+            json_file = f"best_params_{classifier_name}_{Data_tag.replace(' ', '_')}.json"
+            try:
+                with open(json_file, "r") as f:
+                    params = json.load(f)
+                classifier = load_classifier(choice, params)
+                start = time.time()
+                classifier.fit(X_train, y_train)
+                end = time.time()
+                classification_time = end-start
+                y_pred = classifier.predict(X_test)
+            except FileNotFoundError:
+                print(f"  Could not find '{json_file}'")                    
+                    
+            # Export model to c code
+            model_code = port(classifier)
+            
+            # Windows path (use raw string or double backslashes)
+            save_dir = r"C:\Users\user\OneDrive\Έγγραφα\PlatformIO\Projects\bad-spine-wearable-1\src"
+            
+            # Ensure path exists (optional safety check)
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # Full path to save header file
+            save_path = os.path.join(save_dir, f"{classifier_name}_{Data_tag}.h")
+            
+            # Write the file
+            with open(save_path, "w", encoding="utf-8") as f:
+                f.write(model_code)
                 
-            classifier_names = ['KNN', 'DecisionTree', 'RandomForest', 'XGBoost']    
-            print("\n Loading and Rebuilding Models:\n")
-            for name in classifier_name:
-                json_file = f"best_params_{name}.json"
-                try:
-                    with open(json_file, "r") as f:
-                        params = json.load(f)
-                    clf = load_classifier(name, params)
-                    clf.fit(X_train, y_train)
-                    y_pred = clf.predict(X_test)
-                    acc = accuracy_score(y_test, y_pred)
-                    print(f" {name} loaded. Test Accuracy: {acc:.4f}")
-                except FileNotFoundError:
-                    print(f"  Could not find '{json_file}'")
-    
         #========================== PLOTING AND WORD SAVING ==========================
-        
-        def print_confusion_matrix(y_test, y_pred):
-            from sklearn.metrics import confusion_matrix
-            TT = confusion_matrix(y_test, y_pred)
-            n_classes = TT.shape[0]
-            sensitivity = []
-            specificity = []
-        
-            for i in range(n_classes):
-                TP = TT[i, i]
-                FN = np.sum(TT[i, :]) - TP
-                FP = np.sum(TT[:, i]) - TP
-                TN = np.sum(TT) - (TP + FN + FP)
-        
-                sens = TP / (TP + FN) if (TP + FN) != 0 else 0
-                spec = TN / (TN + FP) if (TN + FP) != 0 else 0
-        
-                sensitivity.append(sens * 100)
-                specificity.append(spec * 100)
-        
-            accuracy = np.trace(TT) / np.sum(TT) * 100
-        
-            return accuracy
-        
-        
+
         accuracy = accuracy_score(y_test, y_pred) * 100
         acc = f" Accuracy: {accuracy:.2f} % "
         #accuracy = print_confusion_matrix(y_test, y_pred)
@@ -468,7 +452,6 @@ for choice in range(0,2):
                 print(acc)
                 print('Feature used :', Data_tag)
                 print('Classification Time: ', np.asarray(classification_time).round(3),'seconds')
-                # print('=' * 69)
                 # Plot confusion matrix image as an example 
                 # Original class names from filenames
                 original_class_names = [filename.replace('_feat.csv', '') for filename in files]
@@ -490,9 +473,7 @@ for choice in range(0,2):
                     values_format='d'
                 )
                 
-                # Remove scientific notation
-                ax = plt.gca()
-                
+                # Remove scientific notation    
                 plt.gca().set_xticklabels(class_names, rotation=90)
                 plt.gca().set_yticklabels(class_names)
                 
@@ -524,8 +505,8 @@ for choice in range(0,2):
             return buf.getvalue(), 'temp_image.png'
         
         # Capture simulated console output and image
-        #classification_text, image_path = capture_output_and_plot(classifier_name, accuracy, Data_tag, classification_time, classifier, X_test, y_test)
-        word = 0
+        word = 1
+        
         if word == 0:
             classification_text, image_path = capture_output_and_plot(classifier_name, accuracy, Data_tag, classification_time, classifier, X_test, y_test)
         else:
@@ -552,26 +533,11 @@ for choice in range(0,2):
                 font_name='Times New Roman',
                 font_size=11
                 )
-        
-    # Export model to c code
-    model_code = port(model)
-    
-    # Windows path (use raw string or double backslashes)
-    save_dir = r"C:\Users\user\OneDrive\Έγγραφα\PlatformIO\Projects\bad-spine-wearable-1\src"
-    
-    # Ensure path exists (optional safety check)
-    os.makedirs(save_dir, exist_ok=True)
-    
-    # Full path to save header file
-    save_path = os.path.join(save_dir, f"{classifier_name}.h")
-    
-    # Write the file
-    with open(save_path, "w", encoding="utf-8") as f:
-        f.write(model_code)    
-        
+ 
 doc.save(docx_filename)
-
-
+    
+  
+                
 '''
 with open(f"{classifier_name}.h", "w") as f:
     f.write(port(model)) 

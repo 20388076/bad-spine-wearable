@@ -73,15 +73,6 @@ output_file_2 = [f.replace('.csv', '_feat.csv') for f in input_file_1]
 
 input_file_2 = output_file_1
 
-input_file_2 = [
-    'movement_0.csv', 'x_axis_with _random_movements.csv',
-    'y_axis_with _random_movements.csv', 'z_axis_with _random_movements.csv',
-    'x_1deg_per_min.csv', 'y_1deg_per_min.csv', 'z_1deg_per_min.csv',
-    'x_2deg_per_min.csv', 'y_2deg_per_min.csv', 'z_2deg_per_min.csv',
-    'x_anomaly_detection_3dpersec.csv', 'y_anomaly_detection_3dpersec.csv',
-    'z_anomaly_detection_3dpersec.csv'
-]
-
 location = 'C:\\Users\\user\\OneDrive\\Έγγραφα\\Final work Experiments\\'
 copy_path = [
     'dataset1 1hr do nothing',
@@ -114,13 +105,14 @@ if data_process == 0:
         with open(out_file, 'w', newline='') as outfile:
             writer = csv.writer(outfile)
             for i, row in enumerate(lines, start=1):
-                if i > 19:
+                if i > 17:
                     writer.writerow(row)
 
         # Read CSV with headers manually added
         df1 = pd.read_csv(out_file, names=train_labels)
+        start_time = df1['time (ms)'].dropna().min()
         df1 = df1.sort_values('time (ms)').reset_index(drop=True)
-        df1 = df1[df1['time (ms)'] < 3600500]
+        df1 = df1[df1['time (ms)'] <= 3600100 + start_time]
 
         # Save clean dataset to disk
         df1.to_csv(out_file, index=False)
@@ -179,7 +171,7 @@ elif data_process == 1:
         #--------------------------------------------------------------------
         # Window-based features //min, max, average//
         start_time = df1['time (ms)'].dropna().min()
-        window = (30*103)+ start_time # for every 30 measurements (30 measurements * 103ms dt) + 420ms which is the start time
+        window = (32*103)+ start_time # for every 32 measurements cuz ESP32_FFT library limmitations (32 measurements * 103ms dt) + 420ms which is the start time
         windowdf = (df1['time (ms)'] / window).astype(int)
 
         sensor_cols = ['acceleration x', 'acceleration y', 'acceleration z',

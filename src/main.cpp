@@ -3,25 +3,23 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
 #include <Wire.h>
-#include "DecisionTree.h"
+#include "DecisionTree_RELIFF_FEATURES_10_Best.h"
 #include "ESP_fft.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+#define FFT_N 32 // Must be a power of 2 >= 30
+
+float FFT_input[FFT_N];
+float FFT_output[FFT_N];
 
 using namespace Eloquent::ML::Port;
 
 Adafruit_MPU6050 mpu;
 Servo myServo;
 DecisionTree model;
-TaskFunction_t Task1code1;
-TaskFunction_t Task1code2;
-TaskHandle_t Task1;
-TaskHandle_t Task2;
-#define FFT_SIZE 32
-ESP_fft fft(FFT_REAL, FFT_SIZE, 400); // Correct FFT initialization
-
-// Declare predict function if not already declared in DecisionTree.h
-// extern "C" int predict(float* input_buffer);
+TaskHandle_t Task1, Task2;
+TaskFunction_t Task1code1, Task1code2;
 
 // This code is for a wearable posture detection system using an ESP32, MPU6050 sensor, and a servo motor.
 // Varables Initialization
@@ -37,12 +35,10 @@ int last_position = initial_position; // Last position of servo motor
 int step = 1;                         // Factor to decrease position by degrees per miniute
 int anomaly = 0;                      // Anomaly detection flag
 
-float input_buffer[180 + 10]; // 180 raw + 10 features
+float input_buffer[180];
 int sample_index = 0;
 
-float gyro_y_data[30], gyro_z_data[30], acc_x_data[30], gyro_x_data[30], acc_z_data[30];
-
-// Features extraction functions
+float acc_x_data[32], acc_y_data[32], gyro_y_data[32], gyro_z_data[32], gyro_x_data[32], acc_z_data[32];
 
 float
 compute_energy(float* data, int len) {
@@ -102,98 +98,91 @@ compute_iqr(float* data, int len) {
     return q3 - q1;
 }
 
-//Task1code: getting data from MPU6050
 void
 Task1code(void* pvParameters) {
     for (;;) {
         sensors_event_t a, g, temp;
         mpu.getEvent(&a, &g, &temp);
+        sample_index = 0;
 
-        input_buffer[sample_index * 6 + 0] = a.acceleration.x;
-        input_buffer[sample_index * 6 + 1] = a.acceleration.y;
-        input_buffer[sample_index * 6 + 2] = a.acceleration.z;
-        input_buffer[sample_index * 6 + 3] = g.gyro.x;
-        input_buffer[sample_index * 6 + 4] = g.gyro.y;
-        input_buffer[sample_index * 6 + 5] = g.gyro.z;
+        for (int i = 0; i < 32; i++) {
 
-        acc_x_data[sample_index] = a.acceleration.x;
-        acc_z_data[sample_index] = a.acceleration.z;
-        gyro_x_data[sample_index] = g.gyro.x;
-        gyro_y_data[sample_index] = g.gyro.y;
-        gyro_z_data[sample_index] = g.gyro.z;
-
-        sample_index++;
-
-        if (sample_index == 30) {
-            int idx = 180;
-
-            input_buffer[idx++] = compute_energy(gyro_y_data, 30); // ENERGY_gyro y
-            input_buffer[idx++] = window_max(gyro_z_data, 30);     // gyro_z_window_max
-            input_buffer[idx++] = compute_mad(acc_x_data, 30);     // MAD_acceleration x
-            input_buffer[idx++] = compute_mad(gyro_y_data, 30);    // MAD_gyro y
-
-            // === FFT Feature: FFT_gyro y ===
-            for (int i = 0; i < FFT_SIZE; i++) {
-                fft.real[i] = (i < 30) ? gyro_y_data[i] : 0; // zero padding
-                fft.imag[i] = 0;
-            }
-            fft.Windowing(FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-            fft.Compute(FFT_FORWARD);
-            fft.ComplexToMagnitude();
-            float fft_sum = 0;
-            for (int i = 1; i < 15; i++) {
-                fft_sum += fft.magn[i];
-            }
-            input_buffer[idx++] = fft_sum;
-
-            input_buffer[idx++] = window_mean(gyro_y_data, 30); // gyro_y_window_mean
-            input_buffer[idx++] = compute_iqr(gyro_x_data, 30); // IQR_gyro x
-            input_buffer[idx++] = window_min(gyro_x_data, 30);  // gyro_x_window_min
-            input_buffer[idx++] = compute_mad(gyro_x_data, 30); // MAD_gyro x
-            input_buffer[idx++] = compute_iqr(acc_z_data, 30);  // IQR_acceleration z
-
-            // === Print input_buffer for Debugging ===
-            Serial.println("\n=== input_buffer ===");
-            for (int i = 0; i < idx; i++) {
-                Serial.printf("%.3f, ", input_buffer[i]);
-                if ((i + 1) % 6 == 0) {
-                    Serial.println();
-                }
-            }
-
-            int result = model.predict(input_buffer);
-            Serial.printf("\nPrediction result: %d\n", result);
-
-            sample_index = 0;
+            acc_x_data[i] = a.acceleration.x;
+            acc_y_data[i] = a.acceleration.y;
+            acc_z_data[i] = a.acceleration.z;
+            gyro_x_data[i] = g.gyro.x;
+            gyro_y_data[i] = g.gyro.y;
+            gyro_z_data[i] = g.gyro.z;
+            sample_index = i;
         }
-
-        vTaskDelay(pdMS_TO_TICKS(100));
 
         /*
-        sensors_event_t a, g, temp;
-        mpu.getEvent(&a, &g, &temp); // Acceleration is m/s^2, gyro data is rad/s //
+    Serial.println("\n=== data ===\n");
+    for (int i = 0; i < 32; i++) {
+        Serial.printf("%.3f\t", acc_x_data[i]);
+        Serial.printf("%.3f\t", acc_y_data[i]);
+        Serial.printf("%.3f\t", acc_z_data[i]);
+        Serial.printf("%.3f\t", gyro_x_data[i]);
+        Serial.printf("%.3f\t", gyro_y_data[i]);
+        Serial.printf("%.3f\t", gyro_z_data[i]);
+        Serial.println();
+    }
+    */
+        for (int i = 0; i < 32; i++) {
+            FFT_input[i] = gyro_y_data[i];
+        }
+        ESP_fft fft(FFT_N, 100, FFT_REAL, FFT_FORWARD, FFT_input, FFT_output);
+        fft.execute();
 
-        // Flatten and store into input_buffer
-        input_buffer[sample_index * 6 + 0] = a.acceleration.x;
-        input_buffer[sample_index * 6 + 1] = a.acceleration.y;
-        input_buffer[sample_index * 6 + 2] = a.acceleration.z;
-        input_buffer[sample_index * 6 + 3] = g.gyro.x;
-        input_buffer[sample_index * 6 + 4] = g.gyro.y;
-        input_buffer[sample_index * 6 + 5] = g.gyro.z;
+        if (sample_index == 31) {
 
-        Serial.printf("\n%lu, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f", millis(), a.acceleration.x, a.acceleration.y,
-                      a.acceleration.z, g.gyro.x, g.gyro.y, g.gyro.z);
-        
-        sample_index++;
+            float output_matrix[32][10];
+            float f0 = 0, f1 = 0, f2 = 0, f3 = 0, f4[FFT_N], f5 = 0, f6 = 0, f7 = 0, f8 = 0, f9 = 0;
 
-        // If 30 samples collected, run inference
-        if (sample_index == 30) {
+            f0 = compute_energy(FFT_output, 32); // Energy of gyro_y
+            f1 = window_max(gyro_z_data, 32);    // Maximum value of gyro_z
+            f2 = compute_mad(acc_x_data, 32);    // Mean Absolute Deviation of acc_x
+            f3 = compute_mad(gyro_y_data, 32);   // Mean Absolute Deviation of gyro_y
+            //f4 = FFT_output;                     // FFT_gyro y
+            f5 = window_mean(gyro_y_data, 32); // Mean of gyro_y
+            f6 = compute_iqr(gyro_x_data, 32); // Interquartile Range of gyro_x
+            f7 = window_min(gyro_x_data, 32);  // Minimum value of gyro_x
+            f8 = compute_mad(gyro_x_data, 32); // Mean Absolute Deviation of gyro_x
+            f9 = compute_iqr(acc_z_data, 32);  // Interquartile Range of acc_z
+
+            // Fill matrix
+            for (int i = 0; i < 32; i++) {
+
+                output_matrix[i][0] = f0;            // Energy of gyro_y
+                output_matrix[i][1] = f1;            // Maximum value of gyro_z
+                output_matrix[i][2] = f2;            // Mean Absolute Deviation of acc_x
+                output_matrix[i][3] = f3;            // Mean Absolute Deviation of gyro_y
+                output_matrix[i][4] = FFT_output[i]; // FFT_gyro y
+                output_matrix[i][5] = f5;            // Mean of gyro_y
+                output_matrix[i][6] = f6;            // Interquartile Range of gyro_x
+                output_matrix[i][7] = f7;            // Minimum value of gyro_x
+                output_matrix[i][8] = f8;            // Mean Absolute Deviation of gyro_x
+                output_matrix[i][9] = f9;            // Interquartile Range of acc_z
+            }
+            /*
+        Serial.println("\n=== Output Matrix (32x10) ===");
+        for (int i = 0; i < 32; i++) {
+            for (int j = 0; j < 10; j++) {
+                Serial.printf("%.3f\t", output_matrix[i][j]);
+            }
+            Serial.println();
+        }
+        Serial.println("\n=== FFT_output ===");
+        for (int i = 0; i < FFT_N; i++) {
+            Serial.printf("%.3f\t", FFT_output[i]);
+            
+        }
+        */
             int result = model.predict(input_buffer);
             Serial.printf("\nPrediction result: %d\n", result);
-            sample_index = 0;  // Reset for next 30 samples
         }
+
         vTaskDelay(pdMS_TO_TICKS(100));
-        */
     }
 }
 
@@ -255,7 +244,6 @@ setup() {
     myServo.attach(servoPin);        // Attach servo to pin 26
     myServo.write(initial_position); // Set initial position
     randomSeed(analogRead(A0));      // Seed signals from port for random numbers
-    Serial.begin(115200);
 
     Serial.println("Wearable Posture Detection System, version:, author: ACHILLIOS PITTSILKAS");
 
