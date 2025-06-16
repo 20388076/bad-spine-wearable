@@ -425,7 +425,7 @@ for choice in range(0,2):
             os.makedirs(save_dir, exist_ok=True)
             
             # Full path to save header file
-            save_path = os.path.join(save_dir, f"{classifier_name}_{Data_tag}.h")
+            save_path = os.path.join(save_dir, f"{classifier_name}_{Data_tag.replace(' ', '_')}.h")
             
             # Write the file
             with open(save_path, "w", encoding="utf-8") as f:

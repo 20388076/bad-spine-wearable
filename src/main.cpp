@@ -3,21 +3,29 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
 #include <Wire.h>
-#include "DecisionTree_RELIFF_FEATURES_10_Best.h"
+
 #include "ESP_fft.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+#define USE_RAW_DATA 0 // Set to 0 for raw data, 1 for RELIEF features
+
+#if USE_RAW_DATA
+#include "DecisionTree_RELIFF_FEATURES_10_Best.h"
+Eloquent::ML::Port::DecisionTree model;
+#else
+#include "DecisionTree_ONLY_RAW_DATA.h"
+Eloquent::ML::Port::DecisionTree model;
+#endif
 
 #define FFT_N 32 // Must be a power of 2 >= 30
 
 float FFT_input[FFT_N];
 float FFT_output[FFT_N];
 
-using namespace Eloquent::ML::Port;
-
 Adafruit_MPU6050 mpu;
 Servo myServo;
-DecisionTree model;
+
 TaskHandle_t Task1, Task2;
 TaskFunction_t Task1code1, Task1code2;
 
@@ -34,8 +42,7 @@ int new_position = 0;                 // New position for servo motor
 int last_position = initial_position; // Last position of servo motor
 int step = 1;                         // Factor to decrease position by degrees per miniute
 int anomaly = 0;                      // Anomaly detection flag
-
-float input_buffer[180];
+int data_flag = 0;                    // Data flag to indicate data choice
 int sample_index = 0;
 
 float acc_x_data[32], acc_y_data[32], gyro_y_data[32], gyro_z_data[32], gyro_x_data[32], acc_z_data[32];
@@ -104,82 +111,87 @@ Task1code(void* pvParameters) {
         sensors_event_t a, g, temp;
         mpu.getEvent(&a, &g, &temp);
         sample_index = 0;
+        if (data_flag == 0) {
+            float input_array[6] = {a.acceleration.x, a.acceleration.y, a.acceleration.z, g.gyro.x, g.gyro.y, g.gyro.z};
+            int result = model.predict(input_array);
+            Serial.printf("\nPrediction result: %d\n", result);
 
-        for (int i = 0; i < 32; i++) {
+        } else {
 
-            acc_x_data[i] = a.acceleration.x;
-            acc_y_data[i] = a.acceleration.y;
-            acc_z_data[i] = a.acceleration.z;
-            gyro_x_data[i] = g.gyro.x;
-            gyro_y_data[i] = g.gyro.y;
-            gyro_z_data[i] = g.gyro.z;
-            sample_index = i;
-        }
-
-        /*
-    Serial.println("\n=== data ===\n");
-    for (int i = 0; i < 32; i++) {
-        Serial.printf("%.3f\t", acc_x_data[i]);
-        Serial.printf("%.3f\t", acc_y_data[i]);
-        Serial.printf("%.3f\t", acc_z_data[i]);
-        Serial.printf("%.3f\t", gyro_x_data[i]);
-        Serial.printf("%.3f\t", gyro_y_data[i]);
-        Serial.printf("%.3f\t", gyro_z_data[i]);
-        Serial.println();
-    }
-    */
-        for (int i = 0; i < 32; i++) {
-            FFT_input[i] = gyro_y_data[i];
-        }
-        ESP_fft fft(FFT_N, 100, FFT_REAL, FFT_FORWARD, FFT_input, FFT_output);
-        fft.execute();
-
-        if (sample_index == 31) {
-
-            float output_matrix[32][10];
-            float f0 = 0, f1 = 0, f2 = 0, f3 = 0, f4[FFT_N], f5 = 0, f6 = 0, f7 = 0, f8 = 0, f9 = 0;
-
-            f0 = compute_energy(FFT_output, 32); // Energy of gyro_y
-            f1 = window_max(gyro_z_data, 32);    // Maximum value of gyro_z
-            f2 = compute_mad(acc_x_data, 32);    // Mean Absolute Deviation of acc_x
-            f3 = compute_mad(gyro_y_data, 32);   // Mean Absolute Deviation of gyro_y
-            //f4 = FFT_output;                     // FFT_gyro y
-            f5 = window_mean(gyro_y_data, 32); // Mean of gyro_y
-            f6 = compute_iqr(gyro_x_data, 32); // Interquartile Range of gyro_x
-            f7 = window_min(gyro_x_data, 32);  // Minimum value of gyro_x
-            f8 = compute_mad(gyro_x_data, 32); // Mean Absolute Deviation of gyro_x
-            f9 = compute_iqr(acc_z_data, 32);  // Interquartile Range of acc_z
-
-            // Fill matrix
             for (int i = 0; i < 32; i++) {
 
-                output_matrix[i][0] = f0;            // Energy of gyro_y
-                output_matrix[i][1] = f1;            // Maximum value of gyro_z
-                output_matrix[i][2] = f2;            // Mean Absolute Deviation of acc_x
-                output_matrix[i][3] = f3;            // Mean Absolute Deviation of gyro_y
-                output_matrix[i][4] = FFT_output[i]; // FFT_gyro y
-                output_matrix[i][5] = f5;            // Mean of gyro_y
-                output_matrix[i][6] = f6;            // Interquartile Range of gyro_x
-                output_matrix[i][7] = f7;            // Minimum value of gyro_x
-                output_matrix[i][8] = f8;            // Mean Absolute Deviation of gyro_x
-                output_matrix[i][9] = f9;            // Interquartile Range of acc_z
+                acc_x_data[i] = a.acceleration.x;
+                acc_y_data[i] = a.acceleration.y;
+                acc_z_data[i] = a.acceleration.z;
+                gyro_x_data[i] = g.gyro.x;
+                gyro_y_data[i] = g.gyro.y;
+                gyro_z_data[i] = g.gyro.z;
+                sample_index = i;
             }
             /*
-        Serial.println("\n=== Output Matrix (32x10) ===");
-        for (int i = 0; i < 32; i++) {
-            for (int j = 0; j < 10; j++) {
-                Serial.printf("%.3f\t", output_matrix[i][j]);
+            Serial.println("\n=== data ===\n");
+            for (int i = 0; i < 32; i++) {
+                Serial.printf("%.3f\t", acc_x_data[i]);
+                Serial.printf("%.3f\t", acc_y_data[i]);
+                Serial.printf("%.3f\t", acc_z_data[i]);
+                Serial.printf("%.3f\t", gyro_x_data[i]);
+                Serial.printf("%.3f\t", gyro_y_data[i]);
+                Serial.printf("%.3f\t", gyro_z_data[i]);
+                Serial.println();
             }
-            Serial.println();
-        }
-        Serial.println("\n=== FFT_output ===");
-        for (int i = 0; i < FFT_N; i++) {
-            Serial.printf("%.3f\t", FFT_output[i]);
-            
-        }
-        */
-            int result = model.predict(input_buffer);
-            Serial.printf("\nPrediction result: %d\n", result);
+            */
+            for (int i = 0; i < 32; i++) {
+                FFT_input[i] = gyro_y_data[i];
+            }
+
+            ESP_fft fft(FFT_N, 100, FFT_REAL, FFT_FORWARD, FFT_input, FFT_output);
+            fft.execute();
+
+            if (sample_index == 31) {
+
+                float output_matrix[1][10];
+                float f0 = 0, f1 = 0, f2 = 0, f3 = 0, f4 = 0, f5 = 0, f6 = 0, f7 = 0, f8 = 0, f9 = 0;
+
+                f0 = compute_energy(FFT_output, 32); // Energy of gyro_y
+                f1 = window_max(gyro_z_data, 32);    // Maximum value of gyro_z
+                f2 = compute_mad(acc_x_data, 32);    // Mean Absolute Deviation of acc_x
+                f3 = compute_mad(gyro_y_data, 32);   // Mean Absolute Deviation of gyro_y
+                f4 = FFT_output[0];                  // FFT_gyro y
+                f5 = window_mean(gyro_y_data, 32);   // Mean of gyro_y
+                f6 = compute_iqr(gyro_x_data, 32);   // Interquartile Range of gyro_x
+                f7 = window_min(gyro_x_data, 32);    // Minimum value of gyro_x
+                f8 = compute_mad(gyro_x_data, 32);   // Mean Absolute Deviation of gyro_x
+                f9 = compute_iqr(acc_z_data, 32);    // Interquartile Range of acc_z
+
+                output_matrix[0][0] = f0;            // Energy of gyro_y
+                output_matrix[0][1] = f1;            // Maximum value of gyro_z
+                output_matrix[0][2] = f2;            // Mean Absolute Deviation of acc_x
+                output_matrix[0][3] = f3;            // Mean Absolute Deviation of gyro_y
+                output_matrix[0][4] = FFT_output[0]; // FFT_gyro y
+                output_matrix[0][5] = f5;            // Mean of gyro_y
+                output_matrix[0][6] = f6;            // Interquartile Range of gyro_x
+                output_matrix[0][7] = f7;            // Minimum value of gyro_x
+                output_matrix[0][8] = f8;            // Mean Absolute Deviation of gyro_x
+                output_matrix[0][9] = f9;            // Interquartile Range of acc_z
+
+                int result = model.predict(output_matrix[0]);
+                Serial.printf("\nPrediction result: %d\n", result);
+            }
+
+            /*
+            Serial.println("\n=== Output Matrix (32x10) ===");
+            for (int i = 0; i < 32; i++) {
+                for (int j = 0; j < 10; j++) {
+                    Serial.printf("%.3f\t", output_matrix[i][j]);
+                }
+                Serial.println();
+            }
+            Serial.println("\n=== FFT_output ===");
+            for (int i = 0; i < FFT_N; i++) {
+                Serial.printf("%.3f\t", FFT_output[i]);
+                
+            }
+            */
         }
 
         vTaskDelay(pdMS_TO_TICKS(100));
