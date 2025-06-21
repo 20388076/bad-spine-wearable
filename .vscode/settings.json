@@ -50,7 +50,8 @@
         "concepts": "cpp",
         "algorithm": "cpp",
         "cstdarg": "cpp",
-        "complex": "cpp"
+        "complex": "cpp",
+        "test_feat": "cpp"
     },
     "C_Cpp.default.compilerPath": "C:\\win-builds\\bin\\gcc.exe"
 }
