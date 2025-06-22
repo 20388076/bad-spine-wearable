@@ -66,20 +66,20 @@ def loadData(path, files, index):
         tag ='ALL FEATURES'
 
     elif index == 2:
-        column_indices = [9, 32, 35, 72, 42, 22, 38, 66, 20, 65]
+        column_indices = [64, 66, 9, 65, 35, 32, 22, 38, 42, 20]
         Xn = X[:, column_indices]
         tag ='RELIFF FEATURES 10 Best'
         '''
-        Index 9: feature 0: Production Cubic Magnitude of Angular Velocity
-        Index 32: feature 1: gyro_z_window_max
-        Index 35: feature 2: Signal Magnitude Area Gyroscope
-        Index 72: feature 3: ENERGY_acceleration x
-        Index 42: feature 4: MAD_acceleration x
-        Index 22: feature 5: acceleration_z_window_mean
-        Index 38: feature 6: RMS_acceleration z
-        Index 66: feature 7: FFT_acceleration x
-        Index 20: feature 8: acceleration_y_window_max
-        Index 65: feature 9: IQR_gyro z
+        Index 64: feature 0: IQR_gyro y
+        Index 66: feature 1: FFT_acceleration x
+        Index 9: feature 2: Production Cubic Magnitude of Angular Velocity
+        Index 65: feature 3: IQR_gyro z
+        Index 35: feature 4: Signal Magnitude Area Gyroscope
+        Index 32: feature 5: gyro_z_window_max
+        Index 22: feature 6: acceleration_z_window_mean
+        Index 38: feature 7: RMS_acceleration z
+        Index 42: feature 8: MAD_acceleration x
+        Index 20: feature 9: acceleration_y_window_max
         '''
         
     elif index == 3:
@@ -116,7 +116,7 @@ output_file_1 = [f.replace('.csv', '_10feats.csv') for f in files]
 input_path = './FEATS/'
 output_path_1 = './10_BEST_FEATS/'
 
-find = 1
+find = 2
 
 if find == 0:
     
@@ -149,7 +149,7 @@ elif find == 1:
     df = df.iloc[:, 1:]
     
     # Feature indices
-    feature_indices = [9, 32, 35, 72, 42, 22, 38, 66, 20, 65]
+    feature_indices = [64, 66, 9, 65, 35, 32, 22, 38, 42, 20]
     
     # Get the column names at these indices
     matched_features = [df.columns[i] for i in feature_indices]
@@ -161,7 +161,7 @@ elif find == 1:
         
 elif find == 2:
     
-    column_indices = [9, 32, 35, 72, 42, 22, 38, 66, 20, 65]
+    column_indices = [64, 66, 9, 65, 35, 32, 22, 38, 42, 20]
     
     for file_idx in range(len(files)):
 

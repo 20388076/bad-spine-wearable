@@ -179,7 +179,8 @@ elif data_process == 1:
         #--------------------------------------------------------------------
         
         # Window-based features //min, max, average//
-        df1['window_id'] = (df1.index // 32) # for every 32 measurements due to ESP32_FFT library limmitations (must be multiple of 2)
+        window = 32
+        df1['window_id'] = (df1.index // window) # for every 32 measurements due to ESP32_FFT library limmitations (must be multiple of 2)
         
         sensor_cols = ['acceleration x', 'acceleration y', 'acceleration z',
                        'gyro x', 'gyro y', 'gyro z']
@@ -192,7 +193,7 @@ elif data_process == 1:
         #--------------------------------------------------------------------        
         
         # Signal magnitude area SMA  
-        df1['window_id'] = (df1.index // 32) 
+        df1['window_id'] = (df1.index // window) 
             # Define sensor groups and feature names
         sensor_cols2 = [
             ['acceleration x', 'acceleration y', 'acceleration z'],
@@ -201,7 +202,7 @@ elif data_process == 1:
         feats = ['Signal Magnitude Area Accelerometer', 'Signal Magnitude Area Gyroscope']
         for i, cols in enumerate(sensor_cols2):
             # Calculate row-wise magnitude sum: |x| + |y| + |z|
-            df1[f'_abs_sum_{i}'] = df1[cols].abs().sum(axis=1)  
+            df1[f'_abs_sum_{i}'] = df1[cols].abs().sum(axis=1)
             # Group by window and take mean of that sum to compute SMA
             sma_series = df1.groupby('window_id')[f'_abs_sum_{i}'].mean()
             # Map SMA result back to the original dataframe
@@ -213,7 +214,7 @@ elif data_process == 1:
         # Root Mean Square RMS           
         def compute_feat_per_window(df, columns_to_process, feats, choice):
             df = df.copy()
-            df['window_id'] = (df1.index // 32) 
+            df['window_id'] = (df1.index // window) 
             for col in columns_to_process:
                 feat_col_name = f'{feats[choice]}_{col}'
                 df[feat_col_name] = np.nan
@@ -221,9 +222,9 @@ elif data_process == 1:
             for window_id, group in grouped:
                 for col in columns_to_process:
                     if choice == 0:
-                        val = np.sqrt((group[col] ** 2).mean()).round(3)
+                        val = np.sqrt(sum(group[col] ** 2)) / window
                     elif choice == 1:
-                        val = np.mean(sum(np.abs(group[col] - group[col].mean())))
+                        val = (sum(np.abs(group[col] - group[col].mean()))) / window
                     elif choice == 2:
                         val = np.var(group[col])
                     elif choice == 3:
@@ -233,7 +234,7 @@ elif data_process == 1:
                     elif choice == 5:
                         val = np.real(fft(group[col]))
                     elif choice == 6:
-                        val = np.sum(abs(fft(group[col])**2))
+                        val = (np.sum(abs(fft(group[col])**2))) / window
                     df.loc[df['window_id'] == window_id, f'{feats[choice]}_{col}'] = val
             df[[f'{feats[choice]}_{col}' for col in columns_to_process]] = df[[f'{feats[choice]}_{col}' 
                                                                                for col in columns_to_process]].round(3)
@@ -265,25 +266,3 @@ if data_process == 2: # data labeling
     for file_idx in range(len(output_file_2)):
         df1 = pd.read_csv(output_path_2 + output_file_2[file_idx])
         
-        
-        
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

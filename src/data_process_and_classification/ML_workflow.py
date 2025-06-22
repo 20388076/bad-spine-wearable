@@ -164,20 +164,20 @@ def loadData(path, files, index):
         tag ='ALL FEATURES'
 
     elif index == 2:
-        column_indices = [9, 32, 35, 72, 42, 22, 38, 66, 20, 65]
+        column_indices = [64, 66, 9, 65, 35, 32, 22, 38, 42, 20]
         Xn = X[:, column_indices]
         tag ='RELIFF FEATURES 10 Best'
         '''
-        Index 9: Production Cubic Magnitude of Angular Velocity
-        Index 66: FFT_acceleration x
-        Index 35: Signal Magnitude Area Gyroscope
-        Index 72: ENERGY_acceleration x
-        Index 32: gyro_z_window_max
-        Index 22: acceleration_z_window_mean
-        Index 38: RMS_acceleration z
-        Index 20: acceleration_y_window_max
-        Index 68: FFT_acceleration z
-        Index 42: MAD_acceleration x
+        Index 64: feature 0: IQR_gyro y
+        Index 66: feature 1: FFT_acceleration x
+        Index 9: feature 2: Production Cubic Magnitude of Angular Velocity
+        Index 65: feature 3: IQR_gyro z
+        Index 35: feature 4: Signal Magnitude Area Gyroscope
+        Index 32: feature 5: gyro_z_window_max
+        Index 22: feature 6: acceleration_z_window_mean
+        Index 38: feature 7: RMS_acceleration z
+        Index 42: feature 8: MAD_acceleration x
+        Index 20: feature 9: acceleration_y_window_max
         '''
     return Xn, y, np.array(fNames), tag
 
@@ -260,7 +260,7 @@ for choice in range(0,2):
         
         #================================ CLASSIFICATION ==============================
         
-        search = 2
+        search = 1
         
         if search == 0:
             
