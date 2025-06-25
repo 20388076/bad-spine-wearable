@@ -13,13 +13,13 @@ import time
 import sys
 from sklearn import preprocessing
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, TimeSeriesSplit, cross_validate
 from scipy.stats import mode, randint, uniform
 from micromlgen import port
 
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
-                           roc_auc_score, confusion_matrix, ConfusionMatrixDisplay, classification_report, 
-                           roc_curve, auc, RocCurveDisplay)
+                             roc_auc_score, confusion_matrix, ConfusionMatrixDisplay, classification_report, 
+                             roc_curve, auc, RocCurveDisplay, make_scorer, root_mean_squared_error)
 
 import io
 from contextlib import redirect_stdout
@@ -164,20 +164,20 @@ def loadData(path, files, index):
         tag ='ALL FEATURES'
 
     elif index == 2:
-        column_indices = [64, 66, 9, 65, 35, 32, 22, 38, 42, 20]
+        column_indices = [66-1, 35-1, 9-1, 22-1, 38-1, 74-1, 20-1, 21-1, 68-1, 2-1]
         Xn = X[:, column_indices]
         tag ='RELIFF FEATURES 10 Best'
         '''
-        Index 64: feature 0: IQR_gyro y
-        Index 66: feature 1: FFT_acceleration x
-        Index 9: feature 2: Production Cubic Magnitude of Angular Velocity
-        Index 65: feature 3: IQR_gyro z
-        Index 35: feature 4: Signal Magnitude Area Gyroscope
-        Index 32: feature 5: gyro_z_window_max
-        Index 22: feature 6: acceleration_z_window_mean
-        Index 38: feature 7: RMS_acceleration z
-        Index 42: feature 8: MAD_acceleration x
-        Index 20: feature 9: acceleration_y_window_max
+        Index 66: feature 0: IQR_gyro z
+        Index 35: feature 1: Signal Magnitude Area Accelerometer
+        Index 9: feature 2: Acceleration Cubic Product Magnitude
+        Index 22: feature 3: acceleration_y_window_min
+        Index 38: feature 4: RMS_acceleration y
+        Index 74: feature 5: ENERGY_acceleration y
+        Index 20: feature 6: acceleration_y_window_mean
+        Index 21: feature 7: acceleration_y_window_max
+        Index 68: feature 8: FFT_acceleration y
+        Index 2: feature 9: acceleration y
         '''
     return Xn, y, np.array(fNames), tag
 
@@ -200,19 +200,20 @@ docx_filename = 'classification_results.docx'
 doc = init_document(docx_filename)
 
 files = ['movement_0_feat.csv',
-         'x_axis_with _random_movements_feat.csv',
+         'x_axis_with_random_movements_feat.csv',
          'x_1deg_per_min_feat.csv', 
          'x_2deg_per_min_feat.csv',
-         'x_anomaly_detection_3dpersec_feat.csv',
-         'y_axis_with _random_movements_feat.csv',
+         'x_anomaly_detection_3dpermin_feat.csv',
+         'y_axis_with_random_movements_feat.csv',
          'y_1deg_per_min_feat.csv', 
          'y_2deg_per_min_feat.csv',
-         'y_anomaly_detection_3dpersec_feat.csv',
-         'z_axis_with _random_movements_feat.csv',
+         'y_anomaly_detection_3dpermin_feat.csv',
+         'z_axis_with_random_movements_feat.csv',
          'z_1deg_per_min_feat.csv', 
          'z_2deg_per_min_feat.csv',
-         'z_anomaly_detection_3dpersec_feat.csv',
+         'z_anomaly_detection_3dpermin_feat.csv',
     ]
+
 path = './FEATS/'
 
 for choice in range(0,2):
@@ -260,7 +261,7 @@ for choice in range(0,2):
         
         #================================ CLASSIFICATION ==============================
         
-        search = 1
+        search = 2
         
         if search == 0:
             
@@ -287,6 +288,7 @@ for choice in range(0,2):
             end = time.time()
             classification_time = end-start
             y_pred = classifier.predict(X_test)
+            word = 0
             
         elif search == 1: # Hyperparameters Tuning
         
@@ -322,7 +324,7 @@ for choice in range(0,2):
                     'min_samples_split': [2, 5, 10]
                 },
                 'RandomForest': {
-                    'n_estimators': [50, 100, 200],
+                    'n_estimators': [5, 50, 100],
                     'max_depth': [None, 10, 20],
                     'min_samples_split': [2, 5]
                 },
@@ -333,27 +335,28 @@ for choice in range(0,2):
             param_dists = {
                 #KNN': {'n_neighbors': randint(3, 15),'weights': ['uniform', 'distance'],'metric': ['euclidean', 'manhattan']},
                 'DecisionTree': {
-                    'max_depth': randint(3, 20),
+                    'max_depth': randint(1, 20),
                     'min_samples_split': randint(2, 10)
                 },
                 'RandomForest': {
-                    'n_estimators': randint(50, 200),
-                    'max_depth': randint(3, 20),
+                    'n_estimators': randint(1, 100),
+                    'max_depth': randint(1, 20),
                     'min_samples_split': randint(2, 10)
                 }
                 #XGBoost': {'n_estimators': randint(50, 300),'max_depth': randint(3, 10),'learning_rate': uniform(0.01, 1)}
             }
             
+            ts_cv = TimeSeriesSplit(n_splits=5) 
             from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
             # GridSearchCV or RandomizedSearchCV
             search_type = 1  # 0 for grid or 1 for random
             # Store results
             summary = []
             if search_type == 0:
-                search = GridSearchCV(classifier, param_grids[classifier_name], cv=5, scoring='accuracy')
+                search = GridSearchCV(classifier, param_grids[classifier_name], cv=ts_cv, scoring='accuracy')
             else:
                 search = RandomizedSearchCV(classifier, param_dists[classifier_name], 
-                                            n_iter=20, cv=5, scoring='accuracy', random_state=42)
+                                            n_iter=200, cv=ts_cv, n_jobs=-1, scoring='accuracy', random_state=42)
             # Fit and get results
             search.fit(X_train, y_train)
             best_params = search.best_params_
@@ -385,6 +388,9 @@ for choice in range(0,2):
                 print(f"   Test Accuracy: {s['Test Accuracy']}")
                 print(f"   Best Params  : {s['Best Params']}")
                 print(f"   Saved To     : {s['Saved As']}")
+                
+            word = 0   
+            
         elif search == 2:
             
             if choice == 0:
@@ -418,7 +424,7 @@ for choice in range(0,2):
             model_code = port(classifier)
             
             # Windows path (use raw string or double backslashes)
-            save_dir = '../' #r"C:\Users\user\OneDrive\Έγγραφα\PlatformIO\Projects\bad-spine-wearable-1\src"
+            save_dir = '../' 
             
             # Ensure path exists (optional safety check)
             os.makedirs(save_dir, exist_ok=True)
@@ -429,6 +435,8 @@ for choice in range(0,2):
             # Write the file
             with open(save_path, "w", encoding="utf-8") as f:
                 f.write(model_code)
+                
+            word = 1
                 
         #========================== PLOTING AND WORD SAVING ==========================
 
@@ -506,9 +514,9 @@ for choice in range(0,2):
         
             return buf.getvalue(), 'temp_image.png'
         
-        os.remove('temp_image.png')
+        
         # Capture simulated console output and image
-        word = 0
+        
         
         if word == 0:
             classification_text, image_path = capture_output_and_plot(classifier_name,
@@ -516,7 +524,7 @@ for choice in range(0,2):
                                                                       classification_time, 
                                                                       classifier, 
                                                                       X_test, 
-                                                                      y_test)
+                                                                   y_test)
         else:
             classification_text, image_path = capture_output_and_plot(classifier_name,
                                                                       accuracy, 
@@ -524,8 +532,8 @@ for choice in range(0,2):
                                                                       classification_time,
                                                                       classifier, 
                                                                       X_test, 
-                                                                      y_test)
-            
+                                                                 y_test)
+  
             def append_results_to_doc(doc, classification_text, image_path, 
                                       font_name='Times New Roman', font_size=11):
                 paragraph = doc.add_paragraph()
@@ -549,6 +557,7 @@ for choice in range(0,2):
                 font_name='Times New Roman',
                 font_size=11
                 )
+            os.remove('temp_image.png') 
  
 doc.save(docx_filename)
     

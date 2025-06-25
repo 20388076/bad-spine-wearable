@@ -42,16 +42,17 @@ production_cubic(float x, float y, float z) {
     return results;
 }
 
-/*
 float
-compute_energy(float* data, int len) {
+compute_fft_energy(float* magnitude, int len) {
     float sum = 0;
+
     for (int i = 0; i < len; i++) {
-        sum += fabs(data[i] * data[i]);
+        sum += magnitude[i] * magnitude[i];
     }
+
     return sum / len;
 }
-*/
+
 float
 window_max(float* data, int len) {
     float max_val = data[0];
@@ -72,7 +73,15 @@ window_mean(float* data, int len) {
     return sum / len;
 }
 
-/*
+float
+window_abs_mean(float* data, int len) {
+    float sum = 0;
+    for (int i = 0; i < len; i++) {
+        sum += fabs(data[i]);
+    }
+    return sum / len;
+}
+
 float
 window_min(float* data, int len) {
     float min_val = data[0];
@@ -83,7 +92,8 @@ window_min(float* data, int len) {
     }
     return min_val;
 }
-*/
+
+/*
 float
 compute_mad(float* data, int len) {
     float mean = window_mean(data, len);
@@ -93,12 +103,22 @@ compute_mad(float* data, int len) {
     }
     return sum / len;
 }
-
+*/
 float
 compute_iqr(float* data, int len) {
-    std::sort(data, data + len);
-    float q1 = data[len / 4];
-    float q3 = data[3 * len / 4];
+    float sorted[len];
+    memcpy(sorted, data, sizeof(float) * len);
+    std::sort(sorted, sorted + len);
+
+    float q1_pos = (len - 1) * 0.25;
+    float q3_pos = (len - 1) * 0.75;
+
+    int q1_idx = (int)q1_pos;
+    int q3_idx = (int)q3_pos;
+
+    float q1 = sorted[q1_idx] + (sorted[q1_idx + 1] - sorted[q1_idx]) * (q1_pos - q1_idx);
+    float q3 = sorted[q3_idx] + (sorted[q3_idx + 1] - sorted[q3_idx]) * (q3_pos - q3_idx);
+
     return q3 - q1;
 }
 
@@ -108,23 +128,22 @@ compute_rms(float* data, int len) {
     for (int i = 0; i < len; i++) {
         sum += fabs(data[i] * data[i]);
     }
-    return sqrt(sum) / len;
+    return sqrt(sum / len);
 }
 
 void
-compute_FFT(float* input, float* output, int size) {
-    FFT_real myFFT(FFT_N);
-    float FFT_input[FFT_N];
-    float FFT_output[FFT_N];
-    // Example: Fill input with acc_x_data
-    for (int i = 0; i < FFT_N; i++) {
-        FFT_input[i] = input[i];
-    }
-    myFFT.setInput(FFT_input);
-    myFFT.compute();
-    float* result = myFFT.getOutput();
-    for (int i = 0; i < FFT_N; i++) {
-        output[i] = result[i];
+compute_FFT(float* input, float* real_out, float* magnitude_out, int size) {
+    FFT_real myFFT(size);
+    myFFT.setInput(input);
+    myFFT.compute();          // Calculate real and imaginary parts
+    myFFT.computeMagnitude(); // Compute magnitude
+
+    float* real = myFFT.getReal();
+    float* mag = myFFT.getMagnitude();
+
+    for (int i = 0; i < size; ++i) {
+        real_out[i] = real[i];
+        magnitude_out[i] = mag[i];
     }
 }
 
@@ -135,43 +154,44 @@ setup() {
 
 void
 loop() {
+    float fft_real_acc_y[FFT_N];
+    float fft_mag_acc_y[FFT_N];
 
-    float fft_acc_x[FFT_N];
-    compute_FFT(acc_x_data, fft_acc_x, window_size);
+    compute_FFT(acc_y_data, fft_real_acc_y, fft_mag_acc_y, FFT_N);
 
     float output_matrix[window_size][10]; // Initialize output matrix
 
-    float f0 = 0, f1[FFT_N], f2[window_size], f3 = 0, f4 = 0, f5 = 0, f6 = 0, f7 = 0, f8 = 0,
+    float f0 = 0, f1 = 0, f2[window_size], f3 = 0, f4 = 0, f5 = 0, f6 = 0, f7 = 0, f8[FFT_N],
           f9 = 0; // initialize features
 
-    f0 = compute_iqr(gyro_y_data, window_size); // IQR_gyro y
-    // f1 = fft_acc_x;                          // FFT_acceleration x
+    f0 = compute_iqr(gyro_z_data, window_size); // IQR_gyro z
+    f1 = window_abs_mean(acc_x_data, window_size) + window_abs_mean(acc_y_data, window_size)
+         + window_abs_mean(acc_z_data, window_size); // Signal Magnitude Area Accelerometer
     for (int i = 0; i < window_size; i++) {
-        f2[i] = production_cubic(gyro_x_data[i], gyro_y_data[i],
-                                 gyro_z_data[i]); // Production Cubic Magnitude of Angular Velocity
+        f2[i] = production_cubic(acc_x_data[i], acc_y_data[i],
+                                 acc_z_data[i]); // Acceleration Cubic Product Magnitude
     }
-    f3 = compute_iqr(gyro_z_data, window_size); // IQR_gyro z
-    f4 = fabs(window_mean(gyro_x_data, window_size)) + fabs(window_mean(gyro_y_data, window_size))
-         + fabs(window_mean(gyro_z_data, window_size)); // Signal Magnitude Area Gyroscope
-    f5 = window_max(gyro_z_data, window_size);          // acceleration_z_window_max
-    f6 = window_mean(acc_z_data, window_size);          // acceleration_z_window_mean
-    f7 = compute_rms(acc_z_data, window_size);          // RMS_acceleration_z
-    f8 = compute_mad(acc_x_data, window_size);          // MAD_acceleration_x
-    f9 = window_max(acc_y_data, window_size);           // acceleration_y_window_max
+    f3 = window_min(acc_y_data, window_size);            // acceleration_y_window_min
+    f4 = compute_rms(acc_y_data, window_size);           // RMS_acceleration_y
+    f5 = compute_fft_energy(fft_mag_acc_y, window_size); // Energy_acceleration_y
+    f6 = window_mean(acc_y_data, window_size);           // acceleration_y_window_mean
+    f7 = window_max(acc_y_data, window_size);            // acceleration_y_window_max
+    // f8 = fft_real_acc_y;                            // FFT_acceleration y
+    // f9 = acc_y_data;                           // acceleration_y
 
     // Fill matrix
     for (int i = 0; i < window_size; i++) {
 
-        output_matrix[i][0] = f0;           // IQR_gyro y
-        output_matrix[i][1] = fft_acc_x[i]; // FFT_acceleration x
-        output_matrix[i][2] = f2[i];        // Production Cubic Magnitude of Angular Velocity
-        output_matrix[i][3] = f3;           // IQR_gyro z
-        output_matrix[i][4] = f4;           // Signal Magnitude Area Gyroscope
-        output_matrix[i][5] = f5;           // acceleration_z_window_max
-        output_matrix[i][6] = f6;           // acceleration_z_window_mean
-        output_matrix[i][7] = f7;           // RMS_acceleration_z
-        output_matrix[i][8] = f8;           // MAD_acceleration_x
-        output_matrix[i][9] = f9;           // acceleration_y_window_max
+        output_matrix[i][0] = f0;                // IQR_gyro z
+        output_matrix[i][1] = f1;                // Signal Magnitude Area Accelerometer
+        output_matrix[i][2] = f2[i];             // Acceleration Cubic Product Magnitude
+        output_matrix[i][3] = f3;                // acceleration_y_window_min
+        output_matrix[i][4] = f4;                // RMS_acceleration_y
+        output_matrix[i][5] = f5;                // Energy_acceleration_y
+        output_matrix[i][6] = f6;                // acceleration_y_window_mean
+        output_matrix[i][7] = f7;                // acceleration_y_window_max
+        output_matrix[i][8] = fft_real_acc_y[i]; // FFT_acceleration y
+        output_matrix[i][9] = acc_y_data[i];     // acceleration_y
     }
 
     Serial.println("\n=== Output Matrix (32x10) ===");

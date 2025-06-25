@@ -59,19 +59,26 @@ os.makedirs(output_path_1, exist_ok=True)
 os.makedirs(output_path_2, exist_ok=True)
 
 input_file_1 = [
-    'movement_0.csv', 'x_axis_with _random_movements.csv',
-    'y_axis_with _random_movements.csv', 'z_axis_with _random_movements.csv',
+    'movement_0.csv', 'x_axis_with_random_movements.csv',
+    'y_axis_with_random_movements.csv', 'z_axis_with_random_movements.csv',
     'x_1deg_per_min.csv', 'y_1deg_per_min.csv', 'z_1deg_per_min.csv',
     'x_2deg_per_min.csv', 'y_2deg_per_min.csv', 'z_2deg_per_min.csv',
-    'x_anomaly_detection_3dpersec.csv', 'y_anomaly_detection_3dpersec.csv',
-    'z_anomaly_detection_3dpersec.csv'
+    'x_anomaly_detection_3dpermin.csv', 'y_anomaly_detection_3dpermin.csv',
+    'z_anomaly_detection_3dpermin.csv'
 ]
 
 output_file_1 = [f.replace('.csv', '_clear.csv') for f in input_file_1]
 
 output_file_2 = [f.replace('.csv', '_feat.csv') for f in input_file_1]
 
-input_file_2 = output_file_1
+input_file_2 =  [
+    'movement_0_clear.csv', 'x_axis_with_random_movements_clear.csv',
+    'y_axis_with_random_movements_clear.csv', 'z_axis_with_random_movements_clear.csv',
+    'x_1deg_per_min_clr_pr.csv', 'y_1deg_per_min_clr_pr.csv', 'z_1deg_per_min_clr_pr.csv',
+    'x_2deg_per_min_clr_pr.csv', 'y_2deg_per_min_clr_pr.csv', 'z_2deg_per_min_clr_pr.csv',
+    'x_anomaly_detection_3dpermin_clear.csv', 'y_anomaly_detection_3dpermin_clear.csv',
+    'z_anomaly_detection_3dpermin_clear.csv'
+]
 
 location = 'C:\\Users\\user\\OneDrive\\Έγγραφα\\Final work Experiments\\'
 copy_path = [
@@ -221,19 +228,19 @@ elif data_process == 1:
             grouped = df.groupby('window_id')       
             for window_id, group in grouped:
                 for col in columns_to_process:
-                    if choice == 0:
-                        val = np.sqrt(sum(group[col] ** 2)) / window
-                    elif choice == 1:
+                    if choice == 0: # RMS
+                        val = np.sqrt(sum(group[col] ** 2)/ window) 
+                    elif choice == 1: # MAD
                         val = (sum(np.abs(group[col] - group[col].mean()))) / window
-                    elif choice == 2:
+                    elif choice == 2: # VAR
                         val = np.var(group[col])
-                    elif choice == 3:
+                    elif choice == 3: # STD
                         val = np.std(group[col])
-                    elif choice == 4:
+                    elif choice == 4: # IQR
                         val = iqr(group[col])
-                    elif choice == 5:
+                    elif choice == 5: # FFT
                         val = np.real(fft(group[col]))
-                    elif choice == 6:
+                    elif choice == 6: # ENERGY
                         val = (np.sum(abs(fft(group[col])**2))) / window
                     df.loc[df['window_id'] == window_id, f'{feats[choice]}_{col}'] = val
             df[[f'{feats[choice]}_{col}' for col in columns_to_process]] = df[[f'{feats[choice]}_{col}' 

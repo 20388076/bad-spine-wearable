@@ -4,17 +4,20 @@
 #include <Arduino.h>
 #include <math.h>
 
-// Custom FFT real part implementation (mimicking numpy's np.real(fft(x)))
 class FFT_real {
   public:
     FFT_real(int n) : N(n) {
         input = new float[N];
-        output = new float[N];
+        real = new float[N];
+        imag = new float[N];
+        magnitude = new float[N];
     }
 
     ~FFT_real() {
         delete[] input;
-        delete[] output;
+        delete[] real;
+        delete[] imag;
+        delete[] magnitude;
     }
 
     void
@@ -27,24 +30,46 @@ class FFT_real {
     void
     compute() {
         for (int k = 0; k < N; ++k) {
-            float real = 0.0;
+            float sum_real = 0.0;
+            float sum_imag = 0.0;
             for (int n = 0; n < N; ++n) {
-                float angle = -2.0 * PI * k * n / N;
-                real += input[n] * cos(angle);
+                float angle = 2.0 * PI * k * n / N;
+                sum_real += input[n] * cos(angle);
+                sum_imag -= input[n] * sin(angle); // Note minus for FFT
             }
-            output[k] = real;
+            real[k] = sum_real;
+            imag[k] = sum_imag;
+        }
+    }
+
+    void
+    computeMagnitude() {
+        for (int i = 0; i < N; ++i) {
+            magnitude[i] = sqrt(real[i] * real[i] + imag[i] * imag[i]);
         }
     }
 
     float*
-    getOutput() {
-        return output;
+    getReal() {
+        return real;
+    }
+
+    float*
+    getImag() {
+        return imag;
+    }
+
+    float*
+    getMagnitude() {
+        return magnitude;
     }
 
   private:
     int N;
     float* input;
-    float* output;
+    float* real;
+    float* imag;
+    float* magnitude;
 };
 
 #endif

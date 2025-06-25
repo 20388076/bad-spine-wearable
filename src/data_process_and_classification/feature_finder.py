@@ -66,20 +66,20 @@ def loadData(path, files, index):
         tag ='ALL FEATURES'
 
     elif index == 2:
-        column_indices = [64, 66, 9, 65, 35, 32, 22, 38, 42, 20]
+        column_indices = [66-1, 35-1, 9-1, 22-1, 38-1, 74-1, 20-1, 21-1, 68-1, 2-1]
         Xn = X[:, column_indices]
         tag ='RELIFF FEATURES 10 Best'
         '''
-        Index 64: feature 0: IQR_gyro y
-        Index 66: feature 1: FFT_acceleration x
-        Index 9: feature 2: Production Cubic Magnitude of Angular Velocity
-        Index 65: feature 3: IQR_gyro z
-        Index 35: feature 4: Signal Magnitude Area Gyroscope
-        Index 32: feature 5: gyro_z_window_max
-        Index 22: feature 6: acceleration_z_window_mean
-        Index 38: feature 7: RMS_acceleration z
-        Index 42: feature 8: MAD_acceleration x
-        Index 20: feature 9: acceleration_y_window_max
+        Index 66: feature 0: IQR_gyro z
+        Index 35: feature 1: Signal Magnitude Area Accelerometer
+        Index 9: feature 2: Acceleration Cubic Product Magnitude
+        Index 22: feature 3: acceleration_y_window_min
+        Index 38: feature 4: RMS_acceleration y
+        Index 74: feature 5: ENERGY_acceleration y
+        Index 20: feature 6: acceleration_y_window_mean
+        Index 21: feature 7: acceleration_y_window_max
+        Index 68: feature 8: FFT_acceleration y
+        Index 2: feature 9: acceleration y
         '''
         
     elif index == 3:
@@ -97,19 +97,19 @@ def loadData(path, files, index):
 cls() 
 
 files = ['movement_0_feat.csv',
-         'x_axis_with _random_movements_feat.csv',
+         'x_axis_with_random_movements_feat.csv',
          'x_1deg_per_min_feat.csv', 
          'x_2deg_per_min_feat.csv',
-         'x_anomaly_detection_3dpersec_feat.csv',
-         'y_axis_with _random_movements_feat.csv',
+         'x_anomaly_detection_3dpermin_feat.csv',
+         'y_axis_with_random_movements_feat.csv',
          'y_1deg_per_min_feat.csv', 
          'y_2deg_per_min_feat.csv',
-         'y_anomaly_detection_3dpersec_feat.csv',
-         'z_axis_with _random_movements_feat.csv',
+         'y_anomaly_detection_3dpermin_feat.csv',
+         'z_axis_with_random_movements_feat.csv',
          'z_1deg_per_min_feat.csv', 
          'z_2deg_per_min_feat.csv',
-         'z_anomaly_detection_3dpersec_feat.csv',
-         ]
+         'z_anomaly_detection_3dpermin_feat.csv',
+    ]
 
 output_file_1 = [f.replace('.csv', '_10feats.csv') for f in files]
 
@@ -146,10 +146,10 @@ elif find == 1:
     df = pd.read_csv(input_path + 'y_1deg_per_min_feat.csv')
     
     # Drop the time column (assumed to be the first column)
-    df = df.iloc[:, 1:]
+    # df = df.iloc[:, 1:]
     
     # Feature indices
-    feature_indices = [64, 66, 9, 65, 35, 32, 22, 38, 42, 20]
+    feature_indices = [66, 35, 9, 22, 38, 74, 20, 21, 68, 2]
     
     # Get the column names at these indices
     matched_features = [df.columns[i] for i in feature_indices]
@@ -161,14 +161,14 @@ elif find == 1:
         
 elif find == 2:
     
-    column_indices = [64, 66, 9, 65, 35, 32, 22, 38, 42, 20]
+    column_indices = [66, 35, 9, 22, 38, 74, 20, 21, 68, 2]
     
     for file_idx in range(len(files)):
 
         df1 = pd.read_csv(input_path + files[file_idx])
         
         # Drop the time column (assumed to be the first column)
-        df1 = df1.iloc[:, 1:]
+        # df1 = df1.iloc[:, 1:]
         
         df1 = df1.iloc[:, column_indices]
         df1.to_csv(output_path_1 + output_file_1[file_idx], index=False)
