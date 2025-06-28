@@ -61,10 +61,10 @@ os.makedirs(output_path_2, exist_ok=True)
 input_file_1 = [
     'movement_0.csv', 'x_axis_with_random_movements.csv',
     'y_axis_with_random_movements.csv', 'z_axis_with_random_movements.csv',
-    'x_1deg_per_min.csv', 'y_1deg_per_min.csv', 'z_1deg_per_min.csv',
-    'x_2deg_per_min.csv', 'y_2deg_per_min.csv', 'z_2deg_per_min.csv',
-    'x_anomaly_detection_3dpermin.csv', 'y_anomaly_detection_3dpermin.csv',
-    'z_anomaly_detection_3dpermin.csv'
+    'x_1step_per_min.csv', 'y_1step_per_min.csv', 'z_1step_per_min.csv',
+    'x_2step_per_min.csv', 'y_2step_per_min.csv', 'z_2step_per_min.csv',
+    'x_anomaly_detection_3_step_per_min.csv', 'y_anomaly_detection_3_step_per_min.csv',
+    'z_anomaly_detection_3_step_per_min.csv'
 ]
 
 output_file_1 = [f.replace('.csv', '_clear.csv') for f in input_file_1]
@@ -74,10 +74,10 @@ output_file_2 = [f.replace('.csv', '_feat.csv') for f in input_file_1]
 input_file_2 =  [
     'movement_0_clear.csv', 'x_axis_with_random_movements_clear.csv',
     'y_axis_with_random_movements_clear.csv', 'z_axis_with_random_movements_clear.csv',
-    'x_1deg_per_min_clr_pr.csv', 'y_1deg_per_min_clr_pr.csv', 'z_1deg_per_min_clr_pr.csv',
-    'x_2deg_per_min_clr_pr.csv', 'y_2deg_per_min_clr_pr.csv', 'z_2deg_per_min_clr_pr.csv',
-    'x_anomaly_detection_3dpermin_clear.csv', 'y_anomaly_detection_3dpermin_clear.csv',
-    'z_anomaly_detection_3dpermin_clear.csv'
+    'x_1step_per_min_clr_pr.csv', 'y_1step_per_min_clr_pr.csv', 'z_1step_per_min_clr_pr.csv',
+    'x_2step_per_min_clr_pr.csv', 'y_2step_per_min_clr_pr.csv', 'z_2step_per_min_clr_pr.csv',
+    'x_anomaly_detection_3_step_per_min_clear.csv', 'y_anomaly_detection_3_step_per_min_clear.csv',
+    'z_anomaly_detection_3_step_per_min_clear.csv'
 ]
 
 location = 'C:\\Users\\user\\OneDrive\\Έγγραφα\\Final work Experiments\\'

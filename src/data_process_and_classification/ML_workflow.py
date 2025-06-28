@@ -164,20 +164,22 @@ def loadData(path, files, index):
         tag ='ALL FEATURES'
 
     elif index == 2:
-        column_indices = [66-1, 35-1, 9-1, 22-1, 38-1, 74-1, 20-1, 21-1, 68-1, 2-1]
+        column_indices = [35, 74, 66, 38, 9, 39, 44, 68, 75, 20]
+        column_indices = [i - 1 for i in column_indices]
+
         Xn = X[:, column_indices]
         tag ='RELIFF FEATURES 10 Best'
         '''
-        Index 66: feature 0: IQR_gyro z
-        Index 35: feature 1: Signal Magnitude Area Accelerometer
-        Index 9: feature 2: Acceleration Cubic Product Magnitude
-        Index 22: feature 3: acceleration_y_window_min
-        Index 38: feature 4: RMS_acceleration y
-        Index 74: feature 5: ENERGY_acceleration y
-        Index 20: feature 6: acceleration_y_window_mean
-        Index 21: feature 7: acceleration_y_window_max
-        Index 68: feature 8: FFT_acceleration y
-        Index 2: feature 9: acceleration y
+        Index 34: feature 0: Signal Magnitude Area Accelerometer
+        Index 73: feature 1: ENERGY_acceleration y
+        Index 65: feature 2: IQR_gyro z
+        Index 37: feature 3: RMS_acceleration y
+        Index 8: feature 4: Acceleration Cubic Product Magnitude
+        Index 38: feature 5: RMS_acceleration z
+        Index 43: feature 6: MAD_acceleration y
+        Index 67: feature 7: FFT_acceleration y
+        Index 74: feature 8: ENERGY_acceleration z
+        Index 19: feature 9: acceleration_y_window_mean
         '''
     return Xn, y, np.array(fNames), tag
 
@@ -201,17 +203,17 @@ doc = init_document(docx_filename)
 
 files = ['movement_0_feat.csv',
          'x_axis_with_random_movements_feat.csv',
-         'x_1deg_per_min_feat.csv', 
-         'x_2deg_per_min_feat.csv',
-         'x_anomaly_detection_3dpermin_feat.csv',
+         'x_1step_per_min_feat.csv', 
+         'x_2step_per_min_feat.csv',
+         'x_anomaly_detection_3_step_per_min_feat.csv',
          'y_axis_with_random_movements_feat.csv',
-         'y_1deg_per_min_feat.csv', 
-         'y_2deg_per_min_feat.csv',
-         'y_anomaly_detection_3dpermin_feat.csv',
+         'y_1step_per_min_feat.csv', 
+         'y_2step_per_min_feat.csv',
+         'y_anomaly_detection_3_step_per_min_feat.csv',
          'z_axis_with_random_movements_feat.csv',
-         'z_1deg_per_min_feat.csv', 
-         'z_2deg_per_min_feat.csv',
-         'z_anomaly_detection_3dpermin_feat.csv',
+         'z_1step_per_min_feat.csv', 
+         'z_2step_per_min_feat.csv',
+         'z_anomaly_detection_3_step_per_min_feat.csv',
     ]
 
 path = './FEATS/'

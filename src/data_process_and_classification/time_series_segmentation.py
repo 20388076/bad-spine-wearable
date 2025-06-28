@@ -39,9 +39,9 @@ user=1 # 0:ACHILLIOS, 1:OTHER USERS
 # File paths in DataFrame format: [1 deg/min, 2 deg/min]
 file_path = './CLEAN/'
 file_names = pd.DataFrame([
-    ['x_1deg_per_min_clear.csv', 'x_2deg_per_min_clear.csv'],
-    ['y_1deg_per_min_clear.csv', 'y_2deg_per_min_clear.csv'],
-    ['z_1deg_per_min_clear.csv', 'z_2deg_per_min_clear.csv']
+    ['x_1step_per_min_clear.csv', 'x_2step_per_min_clear.csv'],
+    ['y_1step_per_min_clear.csv', 'y_2step_per_min_clear.csv'],
+    ['z_1step_per_min_clear.csv', 'z_2step_per_min_clear.csv']
 ])
 
 save_folder = pd.DataFrame([
@@ -56,13 +56,13 @@ subfolder = [ 'X axis',
 location = 'C:\\Users\\user\\OneDrive\\Έγγραφα\\Final work Experiments\\'
 
 output_names = pd.DataFrame([
-    ['x_1deg_per_min_clr_pr.csv', 'x_2deg_per_min_clr_pr.csv'],
-    ['y_1deg_per_min_clr_pr.csv', 'y_2deg_per_min_clr_pr.csv'],
-    ['z_1deg_per_min_clr_pr.csv', 'z_2deg_per_min_clr_pr.csv']
+    ['x_1step_per_min_clr_pr.csv', 'x_2step_per_min_clr_pr.csv'],
+    ['y_1step_per_min_clr_pr.csv', 'y_2step_per_min_clr_pr.csv'],
+    ['z_1step_per_min_clr_pr.csv', 'z_2step_per_min_clr_pr.csv']
 ])
 
-# Corresponding cutoff times for [1 deg/min, 2 deg/min datasets]
-cutoff_time = [2400000, 1200000]
+# Corresponding cutoff times for [1 step/min, 2 deg/min datasets]
+
 
 # Loop over each row (sensor: x, y, z)
 for axis_index in range(file_names.shape[0]):
@@ -76,22 +76,38 @@ for axis_index in range(file_names.shape[0]):
         except FileNotFoundError:
             print(f'File {file_name} not found. Skipping.')
             continue
-
-        # Filter by cutoff time
+        # Read the full file to extract timestamps
+        original_df = df.copy()
+        
+        # Extract the original timestamps
+        time_col = original_df['time (ms)'].values
+        
+        # Filter and duplicate sensor data (without affecting time)
+        start_time = df['time (ms)'].dropna().min()
+        cutoff_time = [2400000 + start_time, 1200000 + start_time]
         cut_df = df[df['time (ms)'] <= cutoff_time[rate_index]].reset_index(drop=True)
+        
+        # Prepare to fill up to the original file length
+        sensor_columns = df.columns.drop('time (ms)')
+        sensor_data = []
+        
+        i = 0
+        while len(sensor_data) < len(time_col):
+            for j in range(len(cut_df)):
+                if len(sensor_data) >= len(time_col):
+                    break
+                sensor_data.append(cut_df.loc[j, sensor_columns].values)
+            i += 1
+        
+        # Convert to DataFrame and truncate to match original time length
+        sensor_df = pd.DataFrame(sensor_data[:len(time_col)], columns=sensor_columns)
+        
+        # Combine with original timestamps
+        final_df = pd.DataFrame()
+        final_df['time (ms)'] = time_col
+        for col in sensor_columns:
+            final_df[col] = sensor_df[col]
 
-        # Duplicate data until time exceeds 3,600,000 ms
-        combined_df = cut_df.copy()
-        current_max_time = combined_df['time (ms)'].max()
-
-        while current_max_time < 3600500:
-            duplicate = cut_df.copy()
-            duplicate['time (ms)'] += current_max_time + 1
-            combined_df = pd.concat([combined_df, duplicate], ignore_index=True)
-            current_max_time = combined_df['time (ms)'].max()
-
-        # Trim to 3,600,000 ms
-        final_df = combined_df[combined_df['time (ms)'] <= 3600500].reset_index(drop=True)
         if user==0:
             
             # FOR ACHILLIOS Ensure output path exists

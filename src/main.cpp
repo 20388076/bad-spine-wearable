@@ -106,7 +106,6 @@ window_min(float* data, int len) {
     return min_val;
 }
 
-/*
 float
 compute_mad(float* data, int len) {
     float mean = window_mean(data, len);
@@ -116,7 +115,7 @@ compute_mad(float* data, int len) {
     }
     return sum / len;
 }
-*/
+
 float
 compute_iqr(float* data, int len) {
     float sorted[len];
@@ -201,39 +200,44 @@ Task1code(void* pvParameters) {
 
                 compute_FFT(acc_y_data, fft_real_acc_y, fft_mag_acc_y, FFT_N);
 
+                float fft_real_acc_z[FFT_N];
+                float fft_mag_acc_z[FFT_N];
+
+                compute_FFT(acc_z_data, fft_real_acc_z, fft_mag_acc_z, FFT_N);
+
                 float output_matrix[window_size][10]; // Initialize output matrix
 
-                float f0 = 0, f1 = 0, f2[window_size], f3 = 0, f4 = 0, f5 = 0, f6 = 0, f7 = 0, f8[FFT_N],
+                float f0 = 0, f1 = 0, f2 = 0, f3 = 0, f4[window_size], f5 = 0, f6 = 0, f7[FFT_N], f8 = 0,
                       f9 = 0; // initialize features
 
-                f0 = compute_iqr(gyro_z_data, window_size); // IQR_gyro z
-                f1 = window_abs_mean(acc_x_data, window_size) + window_abs_mean(acc_y_data, window_size)
-                     + window_abs_mean(acc_z_data, window_size); // Signal Magnitude Area Accelerometer
+                f0 = window_abs_mean(acc_x_data, window_size) + window_abs_mean(acc_y_data, window_size)
+                     + window_abs_mean(acc_z_data, window_size);     // Signal Magnitude Area Accelerometer
+                f1 = compute_fft_energy(fft_mag_acc_y, window_size); // Energy_acceleration_y
+                f2 = compute_iqr(gyro_z_data, window_size);          // IQR_gyro z
+                f3 = compute_rms(acc_y_data, window_size);           // RMS_acceleration_y
                 for (int i = 0; i < window_size; i++) {
-                    f2[i] = production_cubic(acc_x_data[i], acc_y_data[i],
+                    f4[i] = production_cubic(acc_x_data[i], acc_y_data[i],
                                              acc_z_data[i]); // Acceleration Cubic Product Magnitude
                 }
-                f3 = window_min(acc_y_data, window_size);            // acceleration_y_window_min
-                f4 = compute_rms(acc_y_data, window_size);           // RMS_acceleration_y
-                f5 = compute_fft_energy(fft_mag_acc_y, window_size); // Energy_acceleration_y
-                f6 = window_mean(acc_y_data, window_size);           // acceleration_y_window_mean
-                f7 = window_max(acc_y_data, window_size);            // acceleration_y_window_max
-                // f8 = fft_real_acc_y;                            // FFT_acceleration y
-                // f9 = acc_y_data;                           // acceleration_y
+                f5 = compute_rms(acc_z_data, window_size); // RMS_acceleration_z
+                f6 = compute_mad(acc_y_data, window_size); // MAD_acceleration y
+                //f7 = fft_real_acc_y;                            // FFT_acceleration y
+                f8 = compute_fft_energy(fft_mag_acc_z, window_size); // Energy_acceleration_z
+                f9 = window_mean(acc_y_data, window_size);           // acceleration_y_window_mean
 
                 // Fill matrix
                 for (int i = 0; i < window_size; i++) {
 
-                    output_matrix[i][0] = f0;                // IQR_gyro z
-                    output_matrix[i][1] = f1;                // Signal Magnitude Area Accelerometer
-                    output_matrix[i][2] = f2[i];             // Acceleration Cubic Product Magnitude
-                    output_matrix[i][3] = f3;                // acceleration_y_window_min
-                    output_matrix[i][4] = f4;                // RMS_acceleration_y
-                    output_matrix[i][5] = f5;                // Energy_acceleration_y
-                    output_matrix[i][6] = f6;                // acceleration_y_window_mean
-                    output_matrix[i][7] = f7;                // acceleration_y_window_max
-                    output_matrix[i][8] = fft_real_acc_y[i]; // FFT_acceleration y
-                    output_matrix[i][9] = acc_y_data[i];     // acceleration_y
+                    output_matrix[i][0] = f0;                // Signal Magnitude Area Accelerometer
+                    output_matrix[i][1] = f1;                // Energy_acceleration_y
+                    output_matrix[i][2] = f2;                // IQR_gyro z
+                    output_matrix[i][3] = f3;                // RMS_acceleration_y
+                    output_matrix[i][4] = f4[i];             // Acceleration Cubic Product Magnitude
+                    output_matrix[i][5] = f5;                // RMS_acceleration_z
+                    output_matrix[i][6] = f6;                // MAD_acceleration y
+                    output_matrix[i][7] = fft_real_acc_y[i]; // FFT_acceleration y
+                    output_matrix[i][8] = f8;                // Energy_acceleration_z
+                    output_matrix[i][9] = f9;                // acceleration_y_window_mean
                 }
 
                 Serial.println("\n=== Output Matrix (32x10) ===");
@@ -283,9 +287,9 @@ Task2code(void* pvParameters) {
             }
         }
 
-        else if (senario == 3) { // Moning gradually from 85° to 45°
+        else if (senario == 3) { // Moning gradually from 85° to 45° with 1 servo step
             if (last_position > min_position) {
-                new_position = last_position - 1; // Decrease position by 1 degree
+                new_position = --last_position;   // Decrease position by 1 servo step
                 myServo.write(new_position);      // Move the servo
                 last_position = new_position;     // Update last position
                 int ticks = 60000 / step;         // Calculate time in ms to wait per step
