@@ -3,6 +3,38 @@ Created on Wed Jun 11 16:40:06 2025
 
 @author: AXILLIOS
 """
+# -------------------------------  Working Directory -----------------------------
+# Set the working directory to the script's location if running in Visual Studio Code
+import os
+# Change working directory for this script
+os.chdir(r'C:\Users\user\OneDrive\Έγγραφα\PlatformIO\Projects\bad-spine-wearable-1\src\data_process_and_classification') # modify this path to your working directory
+
+# ============================= Utility Functions =============================
+
+# ----------------------------- Import Libraries ------------------------------
+import time
+import sys
+# ----------------------------- Kernel clean ----------------------------------
+def cls():
+    print(chr(27) + '[2J') 
+# ----------------------------- Kernel pause ----------------------------------
+def pause():
+    input('PRESS ENTER TO CONTINUE.')
+# ----------------------------- Process time count ----------------------------
+def tic():
+    return float(time.time())
+# ----------------------------- Process time return ---------------------------
+def toc(t1, s):
+    t2 = float(time.time())
+    print(f'{s} time taken: {t2 - t1:.6e} seconds')
+# ----------------------------- Kernel break ----------------------------------
+def RETURN():
+    sys.exit()
+# =============================================================================
+
+# ----------------------------- Kernel clean call -----------------------------
+cls()
+
 import os
 import json
 import pandas as pd
@@ -10,25 +42,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sc
 import pandas as pd
-import time
-import sys
-def cls():
-    print(chr(27) + '[2J') 
-def pause():
-    input('PRESS ENTER TO CONTINUE.')
-#------------------------------------------------------------
-def tic():
-    t1=float(time.time());
-    return t1
-#------------------------------------------------------------
-def toc(t1,s):
-    t2=float(time.time());dt=t2-t1;
-    s1='time taken '+s 
-    print('%s %e' % (s1,dt) )     
-#---------------------------------------------------------
-def RETURN():
-    sys.exit()
-
 # -------------------------------------------------------------------------
 
 def loadData(path, files, column_indices, index):
@@ -114,18 +127,18 @@ files = ['movement_0_feat.csv',
 output_file_1 = [f.replace('.csv', '_10feats.csv') for f in files]
 
 input_path = './FEATS/'
-output_path_1 = './10_BEST_FEATS/'
+output_path_1 = r'./10_BEST_FEATS/'
 
-find = 2
+find = 1
 
-column_indices = [35, 74, 66, 38, 9, 39, 44, 68, 75, 20]
+column_indices = [44, 12, 50, 56, 43, 61, 35, 45, 38, 55, 57,	13,	68,	20,	10,	9,	66,	74,	49,	8,	47,	7]
 column_indices = [i - 1 for i in column_indices]
 
 if find == 0:
     
     # Load CSV
     X, y, fNames, Data_tag = loadData(input_path , files, column_indices, index=1)
-    
+    r'''
     import csv
 
     data1 = X.tolist()
@@ -143,6 +156,15 @@ if find == 0:
         writer = csv.writer(file)
         for val in data2:
             writer.writerow([val])  # Wrap in list to write one value per row 
+    
+    import sys
+    sys.path.append(r"C:\Users\user")  # parent folder path
+    from relieff_module import relieff
+    
+    idx, w = relieff(X, y, K=10)
+    print(idx)
+    print(w)
+    '''
 
 elif find == 1:
     

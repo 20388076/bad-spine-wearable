@@ -3,14 +3,44 @@ Created on Tue May  6 14:39:30 2025
 
 @author: AXILLIOS
 '''
+# -------------------------------  Working Directory -----------------------------
+# Set the working directory to the script's location if running in Visual Studio Code
+import os
+# Change working directory for this script
+os.chdir(r'C:\Users\user\OneDrive\Έγγραφα\PlatformIO\Projects\bad-spine-wearable-1\src\data_process_and_classification') # modify this path to your working directory
+
+# ============================= Utility Functions =============================
+
+# ----------------------------- Import Libraries ------------------------------
+import time
+import sys
+# ----------------------------- Kernel clean ----------------------------------
+def cls():
+    print(chr(27) + '[2J') 
+# ----------------------------- Kernel pause ----------------------------------
+def pause():
+    input('PRESS ENTER TO CONTINUE.')
+# ----------------------------- Process time count ----------------------------
+def tic():
+    return float(time.time())
+# ----------------------------- Process time return ---------------------------
+def toc(t1, s):
+    t2 = float(time.time())
+    print(f'{s} time taken: {t2 - t1:.6e} seconds')
+# ----------------------------- Kernel break ----------------------------------
+def RETURN():
+    sys.exit()
+# =============================================================================
+
+# ----------------------------- Kernel clean call -----------------------------
+cls()
+
 import os
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy import unique
-import time
-import sys
 from sklearn import preprocessing
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split, TimeSeriesSplit, cross_validate
@@ -29,22 +59,6 @@ from docx.shared import Pt, Inches
 # import warnings
 # warnings.filterwarnings("ignore")
 
-def cls():
-    print(chr(27) + '[2J') 
-def pause():
-    input('PRESS ENTER TO CONTINUE.')
-#------------------------------------------------------------
-def tic():
-    t1=float(time.time());
-    return t1
-#------------------------------------------------------------
-def toc(t1,s):
-    t2=float(time.time());dt=t2-t1;
-    s1='time taken '+s 
-    print('%s %e' % (s1,dt) )     
-#---------------------------------------------------------
-def RETURN():
-    sys.exit()
 
 #--------------------------------------------------------------------
 
@@ -565,7 +579,7 @@ doc.save(docx_filename)
     
   
                 
-'''
+r'''
 with open(f"{classifier_name}.h", "w") as f:
     f.write(port(model)) 
 # NOT WORKING PROPERLY
@@ -607,7 +621,7 @@ roc_curve_display(classifier, y_train, Xn_test, y_test, class_names)
 '''
 
 
-'''
+r'''
 def roc_curve_display(y_train,X_test,y_test):
     from sklearn.preprocessing import LabelBinarizer
     label_binarizer = LabelBinarizer().fit(y_train)
