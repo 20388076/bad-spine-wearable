@@ -131,7 +131,8 @@ output_path_1 = r'./10_BEST_FEATS/'
 
 find = 1
 
-column_indices = [44, 12, 50, 56, 43, 61, 35, 45, 38, 55, 57,	13,	68,	20,	10,	9,	66,	74,	49,	8,	47,	7]
+column_indices = [ 2,  3, 10, 12, 11, 28, 16, 17, 18,  0 ]
+#column_indices = [4,58,3,59,65,55,61,60,24,37]
 column_indices = [i - 1 for i in column_indices]
 
 if find == 0:
@@ -170,16 +171,15 @@ elif find == 1:
     
     df = pd.read_csv(input_path + 'y_1step_per_min_feat.csv')
     
-    # Drop the time column (assumed to be the first column)
-    df = df.iloc[:, 1:]
+    
     
     # Get the column names at these indices
-    matched_features = [df.columns[i] for i in column_indices]
+    matched_features = [df.columns[i+1] for i in column_indices]
     
     # Print result
     print("Matched feature names:")
     for i, (idx, name) in enumerate(zip(column_indices, matched_features)):
-        print(f"Index {idx}: feature {i}: {name}")
+        print(f"Index {idx+1}: feature {i}: {name}")
         
 elif find == 2:
     
