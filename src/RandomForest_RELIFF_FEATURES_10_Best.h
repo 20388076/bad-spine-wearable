@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdarg>
+#include <cstdint>
 namespace Eloquent {
     namespace ML {
         namespace Port {

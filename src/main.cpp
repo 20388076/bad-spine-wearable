@@ -19,7 +19,7 @@ Eloquent::ML::Port::DecisionTree model;
 Eloquent::ML::Port::DecisionTree model;
 #endif
 
-#define FFT_N 32 // Must be a power of 2 >= 30
+#define FFT_N 16 // Must be a power of 2 
 
 Adafruit_MPU6050 mpu;
 Servo myServo;
