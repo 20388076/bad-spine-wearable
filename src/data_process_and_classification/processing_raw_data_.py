@@ -51,6 +51,14 @@ It supports 4 main stages of data processing:
 3. FFT Feature Processing: Reads the preprocessed feature files, computes the standard deviation of FFT features across all datasets,
     and replaces the FFT values in each dataset with the value from the line that has the highest standard deviation.
     The results are saved in new CSV files with '_feat' suffix.
+4. Build ML dataset (X_data, y_data): Combines all feature files into a single dataset, assigns class labels based on file names,
+    and saves the combined features and labels into 'X_data.csv' and 'y_data.csv'.
+5. Feature Selection using ReliefF algorithm: Applies the ReliefF feature selection algorithm to the training dataset,
+    selects the top features based on their importance scores, and saves the reduced feature set and feature weights to CSV files.
+    The results are saved in 'X_train_reduced_idx_py.csv' and 'Python_relieff_feature_indices_weights.csv'.
+6. Plotting the weight order best features and combine the ESP32 computation time.
+    The results are saved in 'Relieff_Feature_Weights.png' and 'ESP32_computation_time.png'.
+    Also, returns the indices of the 10 best selected weight based features for Edge AI implementation.
 
 To run the program, set the 'data_process' variable set the variable accordingly to the desired operation:
 - 0 for Data Cleaning
@@ -58,11 +66,13 @@ To run the program, set the 'data_process' variable set the variable accordingly
 - 2 for Feature Extraction
 - 3 for FFT Feature Processing
 - 4 for Build ML dataset (X_data, y_data) 
+- 5 for Feature Selection using ReliefF algorithm
+- 6 for Plotting the weight order best features and combine the ESP32 computation time.
 To run all stages sequentially, set 'auto' to 1. To run only one stage, set 'auto' to 0.
 The 'window' variable defines the size of the window for all data processes. 
 '''
 # ------------------------------ Data Process Option --------------------------
-# 0: raw -> clean; 1: clean(1 step/min & 2 steps/min) -> processed(1 step/min & 2 steps/min); 2: clean -> features preprocessed; 3: features preprocessed -> features
+# 0: raw -> clean; 1: clean(1 step/min & 2 steps/min) -> processed(1 step/min & 2 steps/min); 2: clean -> features preprocessed; 3: features preprocessed -> features final; 4: features final -> X_data, y_data; 5: X_data, y_data -> ReliefF selected features; 6: Plotting the weight order best features and combine the ESP32 computation time.
 data_process = 6
 # ------------------------------ Auto Runner Option ---------------------------
 # 0: run only one stage; 1: run all stages
@@ -74,7 +84,7 @@ window = 16
 pl = 1  # 0: no plots; 1: plots
 
 # ----------------------------- Matlab Option for ReleifF -------------------------------
-matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF 
+matlab = 0 # 0: python ReleifF ; 1: Matlab ReleifF 
 
 # ---------------- File Configuration ----------------
 
@@ -691,7 +701,7 @@ def stage_3():
     # Processing files loop for FFT replacement                                                                                                                                                                                                            
     for file_idx in range(len(input_file_3)): 
         df = pd.read_csv(input_path_3 + input_file_3[file_idx])
-        print('=' * 70 + '\n'+ f'Processing file: {input_file_2[file_idx]}\n'+'=' * 70 + '\n')
+        print('=' * 70 + '\n'+ f'Processing file: {input_file_2[file_idx]}\n'+'=' * 70)
         
         # Validate df has the FFT columns
         missing = [c for c in fft_columns if c not in df.columns]
@@ -871,68 +881,165 @@ def stage_5():
 # ---------------- Data Process 6: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
 def stage_6():
     print('\n======= Data Process: 6 =======\n')
-    # ---------------- Import Libraries ------------------ 
     import matplotlib.pyplot as plt
-    # ----------------------------------------------------
-    
+    import matplotlib.patches as mpatches
+    import numpy as np
+    from math import sqrt
+
     if matlab == 0:
         # ---- Paths ----
-        weights_file = os.path.join(output_path_5, 'Python_relieff_feature_indices_weights.csv')
-        X_train_file = os.path.join(output_path_4, 'X_train.csv')
+        weights_file = os.path.join(output_path_5, 'Python_relieff_feature_indices_weights.csv')     
         out_file = os.path.join(output_path_5, 'X_train_top10_py.csv')
-        i = 0 # Python counting is from 0
-        
+        i = 0  # Python counting is from 0
     else:
         # ---- Paths ----
         weights_file = os.path.join(output_path_5, 'Matlab_relieff_feature_indices_weights.csv')
-        X_train_file = os.path.join(output_path_4, 'X_train.csv')
         out_file = os.path.join(output_path_5, 'X_train_top10_matlab.csv')
-        i = 1 # Matlab has deferent counting from python. It counts from 1 
-        
+        i = 1  # Matlab counts from 1
+
     # ---- Step 1: Load weights ----
     weights_df = pd.read_csv(weights_file)
     print(f'Loaded ReliefF weights with shape {weights_df.shape}')
-    
+
     # ---- Step 2: Load X_train with headers ----
+    X_train_file = os.path.join(output_path_4, 'X_train.csv')
     X_train = pd.read_csv(X_train_file)   # must have headers from stage_4
     feature_names = X_train.columns
-    
+
     # ---- Step 3: Extract top 10 feature indices ----
     top10_indices = weights_df['Feature_Index'].head(10).to_numpy()
     print('Top 10 feature indices:', top10_indices - i)
-    
+
     # ---- Step 4: Select top 10 from X_train ----
     X_top10 = X_train.iloc[:, top10_indices-i]
     X_top10.to_csv(out_file, index=False, header=True)
     print(f'Saved reduced X_train with top 10 features: {out_file}, shape {X_top10.shape}')
 
+    # ---- Consistent color mapping ---- 
+    cmap = plt.cm.get_cmap('tab20', len(feature_names)) 
+    color_map = {idx: cmap(idx) for idx in range(len(feature_names))}
+
     # ---- Step 5: Plot index vs weight ----
     plt.figure(figsize=(14,6))
-    bars = plt.bar(weights_df['Feature_Index'] - i, weights_df['ReliefF_Weight'])
-    
-    # Put weight values above each bar
+    bars = plt.bar(
+        weights_df['Feature_Index'] - i,
+        weights_df['ReliefF_Weight'],
+        color=[color_map[idx - i] for idx in weights_df['Feature_Index']]
+    )
+
     for bar, weight in zip(bars, weights_df['ReliefF_Weight']):
         plt.text(bar.get_x() + bar.get_width()/2,
                  bar.get_height(),
                  f'{weight:.3f}',
                  va='top', fontsize=6, rotation=90)
-    
+
     names = ['Python', 'Matlab']
     plt.xlabel('Feature Index')
     plt.ylabel('ReliefF Weight')
     plt.title(f'{names[i]} ReliefF Feature Importance')
-    
-    # Create a compact legend mapping index → feature name
-    legend_labels = [f'{idx}: {feature_names[idx]}' for idx in weights_df['Feature_Index'] - i]
-    plt.legend(bars, legend_labels, fontsize=6, loc='upper left', bbox_to_anchor=(1.02, 1), ncol=2, frameon=False)
-    
-    plot_name = ['Python_relieff_weights_plot.png','Matlab_relieff_weights_plot.png']
+
+    legend_handles = [
+        mpatches.Patch(color=color_map[idx - i], label=f'{idx}: {feature_names[idx - i]}')
+        for idx in weights_df['Feature_Index']
+    ]
+    plt.legend(
+        handles=legend_handles,
+        fontsize=6.5, loc='upper left', bbox_to_anchor=(1.02, 1),
+        ncol=2, frameon=False, title=" Best Feature Index - Name"
+    )
+
+    plot_name1 = ['Python_relieff_weights_plot.png','Matlab_relieff_weights_plot.png']
     plt.tight_layout()
-    plot_path = os.path.join(output_path_5, plot_name[i])
-    plt.savefig(plot_path, dpi=600)
+    plot_path1 = os.path.join(output_path_5, plot_name1[i])
+    plt.savefig(plot_path1, dpi=600)
     plt.show()
     plt.close()
-    print(f'Saved plot: {plot_path}')
+    print(f'Saved plot: {plot_path1}')
+
+    # ---- Step 6: ESP32 Feature Computation Time vs ReliefF Weights ----
+ 
+    times_file = os.path.join(input_path_0, 'feats_computation_times.csv')
+    if os.path.isfile(times_file):
+        times = pd.read_csv(times_file, header=None).iloc[0].to_numpy()
+        times = np.log1p(times)   # safer than log
+        if len(times) != len(feature_names):
+            raise ValueError(f"Mismatch: {len(times)} times vs {len(feature_names)} features")
+    
+        # --- Load weights ---
+        weights_df = pd.read_csv(weights_file)
+        weights_df['Feature_Index'] = weights_df['Feature_Index'] - i  # 0-based
+        feature_names = X_train.columns.to_list()
+    
+        # Merge into DataFrame
+        df = pd.DataFrame({
+            'Feature_Index': np.arange(len(times)),
+            'Feature_Name': feature_names,
+            'Time_ms': times
+        }).merge(
+            weights_df[['Feature_Index', 'ReliefF_Weight']],
+            on='Feature_Index',
+            how='left'
+        )
+    
+        # Define custom score: higher = better
+        df['Max_Weight'] = df['ReliefF_Weight'].max()
+        df['Max_Time']   = df['Time_ms'].max()
+        df['Score'] = (df['ReliefF_Weight'] * df['Max_Time']) / (df['Time_ms'] * df['Max_Weight'])
+    
+        # Sort by score
+        df_sorted = df.sort_values('Score', ascending=False).reset_index(drop=True)
+        colors = [color_map[idx] for idx in df_sorted['Feature_Index']]
+    
+        # Top-10 by score (shift +1 so indices display 1–75)
+        top10 = (df_sorted['Feature_Index'].head(10) + 1).tolist()
+    
+        # --- Plot ---
+        fig, ax = plt.subplots(figsize=(14, 6))
+        bars = ax.bar(
+            np.arange(len(df_sorted)),
+            df_sorted['Score'],
+            color=colors,
+            edgecolor='black'
+        )
+    
+        # Label each bar with feature index (1–75)
+        for ix, (bar, feat_idx) in enumerate(zip(bars, df_sorted['Feature_Index'])):
+            feat_label = feat_idx + 1  # shift for human-readable indexing
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.001,
+                    str(feat_label), ha='center', fontsize=6,
+                    color='cyan' if feat_label in top10 else 'black')
+    
+        # Highlight top-10
+        for ix, feat_idx in enumerate(df_sorted['Feature_Index']):
+            if (feat_idx + 1) in top10:
+                bars[ix].set_edgecolor('cyan')
+                bars[ix].set_linewidth(2)
+    
+        ax.set_xlabel('Features (sorted by Custom Score)')
+        ax.set_ylabel('Custom Score (normalized weight/time)')
+        ax.set_title(f'{names[i]} Feature Trade-off: Importance vs Computation Time')
+    
+        # --- Legend (index: name, from 1 to 75) ---
+        legend_handles = [
+            mpatches.Patch(color=color_map[idx], label=f'{idx+1}: {feature_names[idx]}')
+            for idx in df_sorted['Feature_Index']
+        ]
+        plt.legend(
+            handles=legend_handles,
+            fontsize=6, loc='upper left', bbox_to_anchor=(1.02, 1),
+            ncol=2, frameon=False, title="Feature Index → Name"
+        )
+    
+        plot_name2 = ['Python_Feats_CustomScore.png', 'Matlab_Feats_CustomScore.png']
+        plot_path2 = os.path.join(output_path_5, plot_name2[i])
+        plt.tight_layout()
+        plt.savefig(plot_path2, dpi=600)
+        plt.show()
+        plt.close()
+        print(f'Saved plot: {plot_path2}')
+ 
+    else:
+        print('Warning: feats_computation_times.csv not found, skipping ESP32 plot.')
 
 # ============================= Auto Runner ===================================
 

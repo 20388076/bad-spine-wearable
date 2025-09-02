@@ -11,3 +11,4 @@ This repository is a project for a wearable system for analyzing and notifying s
 3) ESP32 test files so that anyone can reproduce the experimental procedures, as well as the wearable device,  located in src.
 
 4) the final ESP32 sitting posture prediction file,  located in src, named main.cpp.
+
