@@ -144,17 +144,28 @@ compute_iqr(float* data, int len) {
 
 // ---- FFT ----
 void
-compute_FFT(float* input, float* real_out, float* magnitude_out, int size) {
+compute_FFT_real(float* input, float* real_out, int size) {
+    FFT_real myFFT(size);
+    myFFT.setInput(input);
+    myFFT.compute(); // Calculate real and imaginary parts
+
+    float* real = myFFT.getReal();
+
+    for (int i = 0; i < size; ++i) {
+        real_out[i] = real[i];
+    }
+}
+
+void
+compute_FFT_mag(float* input, float* magnitude_out, int size) {
     FFT_real myFFT(size);
     myFFT.setInput(input);
     myFFT.compute();          // Calculate real and imaginary parts
     myFFT.computeMagnitude(); // Compute magnitude
 
-    float* real = myFFT.getReal();
     float* mag = myFFT.getMagnitude();
 
     for (int i = 0; i < size; ++i) {
-        real_out[i] = real[i];
         magnitude_out[i] = mag[i];
     }
 }
@@ -272,9 +283,9 @@ compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& 
     float cx = g_x / g_mag;
     float cy = g_y / g_mag;
     float cz = g_z / g_mag;
-    theta_x = acos(cx) * 180.0f / PI;
-    theta_y = acos(cy) * 180.0f / PI;
-    theta_z = acos(cz) * 180.0f / PI;
+    theta_x = acos(cx);
+    theta_y = acos(cy);
+    theta_z = acos(cz);
 }
 
 void
@@ -634,67 +645,73 @@ setup() {
 
     // --- f64 ---
     start = micros();
-    compute_FFT(acc_x_data, fft_real_acc_x, fft_mag_acc_x, WINDOW);
+    compute_FFT_real(acc_x_data, fft_real_acc_x, WINDOW);
     float f64 = fft_real_acc_x[1]; // first non-DC bin
     float t64 = micros() - start;
 
     // --- f65 ---
     start = micros();
-    compute_FFT(acc_y_data, fft_real_acc_y, fft_mag_acc_y, WINDOW);
+    compute_FFT_real(acc_y_data, fft_real_acc_y, WINDOW);
     float f65 = fft_real_acc_y[1];
     float t65 = micros() - start;
 
     // --- f66 ---
     start = micros();
-    compute_FFT(acc_z_data, fft_real_acc_z, fft_mag_acc_z, WINDOW);
+    compute_FFT_real(acc_z_data, fft_real_acc_z, WINDOW);
     float f66 = fft_real_acc_z[8]; // 9th non-DC bin
     float t66 = micros() - start;
 
     // --- f67 ---
     start = micros();
-    compute_FFT(gyro_x_data, fft_real_gyro_x, fft_mag_gyro_x, WINDOW);
+    compute_FFT_real(gyro_x_data, fft_real_gyro_x, WINDOW);
     float f67 = fft_real_gyro_x[1];
     float t67 = micros() - start;
 
     // --- f68 ---
     start = micros();
-    compute_FFT(gyro_y_data, fft_real_gyro_y, fft_mag_gyro_y, WINDOW);
+    compute_FFT_real(gyro_y_data, fft_real_gyro_y, WINDOW);
     float f68 = fft_real_gyro_y[1];
     float t68 = micros() - start;
 
     // --- f69 ---
     start = micros();
-    compute_FFT(gyro_z_data, fft_real_gyro_z, fft_mag_gyro_z, WINDOW);
+    compute_FFT_real(gyro_z_data, fft_real_gyro_z, WINDOW);
     float f69 = fft_real_gyro_z[1];
     float t69 = micros() - start;
 
     // --- f70 ---
     start = micros();
+    compute_FFT_mag(acc_x_data, fft_mag_acc_x, WINDOW);
     float f70 = compute_fft_energy(fft_mag_acc_x, WINDOW);
     float t70 = micros() - start;
 
     // --- f71 ---
     start = micros();
+    compute_FFT_mag(acc_y_data, fft_mag_acc_y, WINDOW);
     float f71 = compute_fft_energy(fft_mag_acc_y, WINDOW);
     float t71 = micros() - start;
 
     // --- f72 ---
     start = micros();
+    compute_FFT_mag(acc_z_data, fft_mag_acc_z, WINDOW);
     float f72 = compute_fft_energy(fft_mag_acc_z, WINDOW);
     float t72 = micros() - start;
 
     // --- f73 ---
     start = micros();
+    compute_FFT_mag(gyro_x_data, fft_mag_gyro_x, WINDOW);
     float f73 = compute_fft_energy(fft_mag_gyro_x, WINDOW);
     float t73 = micros() - start;
 
     // --- f74 ---
     start = micros();
+    compute_FFT_mag(gyro_y_data, fft_mag_gyro_y, WINDOW);
     float f74 = compute_fft_energy(fft_mag_gyro_y, WINDOW);
     float t74 = micros() - start;
 
     // --- f75 ---
     start = micros();
+    compute_FFT_mag(gyro_z_data, fft_mag_gyro_z, WINDOW);
     float f75 = compute_fft_energy(fft_mag_gyro_z, WINDOW);
     float t75 = micros() - start;
 

@@ -51,8 +51,9 @@ It supports 4 main stages of data processing:
 3. FFT Feature Processing: Reads the preprocessed feature files, computes the standard deviation of FFT features across all datasets,
     and replaces the FFT values in each dataset with the value from the line that has the highest standard deviation.
     The results are saved in new CSV files with '_feat' suffix.
-4. Build ML dataset (X_data, y_data): Combines all feature files into a single dataset, assigns class labels based on file names,
-    and saves the combined features and labels into 'X_data.csv' and 'y_data.csv'.
+4. Build Machine Learning - ML dataset (X_data, y_data): Combines all feature files into a single dataset, assigns class labels based on file names,
+    and saves the combined features and labels into 'X_data.csv' and 'y_data.csv', splits combine data to train - test datasets for ML, with the same 
+    pattern to be followed for raw and g converted data.
 5. Feature Selection using ReliefF algorithm: Applies the ReliefF feature selection algorithm to the training dataset,
     selects the top features based on their importance scores, and saves the reduced feature set and feature weights to CSV files.
     The results are saved in 'X_train_reduced_idx_py.csv' and 'Python_relieff_feature_indices_weights.csv'.
@@ -72,7 +73,11 @@ To run all stages sequentially, set 'auto' to 1. To run only one stage, set 'aut
 The 'window' variable defines the size of the window for all data processes. 
 '''
 # ------------------------------ Data Process Option --------------------------
-# 0: raw -> clean; 1: clean(1 step/min & 2 steps/min) -> processed(1 step/min & 2 steps/min); 2: clean -> features preprocessed; 3: features preprocessed -> features final; 4: features final -> X_data, y_data; 5: X_data, y_data -> ReliefF selected features; 6: Plotting the weight order best features and combine the ESP32 computation time.
+# 0: raw -> clean; 
+# 1: clean(1 step/min & 2 steps/min) -> processed(1 step/min & 2 steps/min); 
+# 2: clean -> features preprocessed; 
+# 3: features preprocessed -> features final; 4: features final -> X_data, y_data; 5: X_data, y_data -> ReliefF selected features; 
+# 6: Plotting the weight order best features and combine the ESP32 computation time.
 data_process = 6
 # ------------------------------ Auto Runner Option ---------------------------
 # 0: run only one stage; 1: run all stages
@@ -206,9 +211,11 @@ weights_file = 'Python_relieff_feature_indices_weights.csv'
 # --- files for plots ---
 
 # Define the path for saving plots
-plot_path = os.path.join(output_path_0, 'PLOTS')
-# Create output directory if it doesn't exist
-os.makedirs(plot_path, exist_ok=True)
+def plot (output_path):
+    plot_path = os.path.join(output_path, 'PLOTS')
+    # Create output directory if it doesn't exist
+    os.makedirs(plot_path, exist_ok=True)
+    return plot_path
 
 # ---------------- Data Process 0: for cleaning raw data ----------------
 def stage_0():
@@ -341,7 +348,7 @@ def stage_0():
         fig.tight_layout(rect=[0, 0, 1, 0.97])
         
         plot_name = 'data_morphology_overview.png'
-        plot_path_all = os.path.join(plot_path, plot_name)
+        plot_path_all = os.path.join(plot(output_path_0), plot_name)
         plt.savefig(plot_path_all, dpi=600, bbox_inches='tight')
         plt.show()
         plt.close()
@@ -473,7 +480,7 @@ def stage_1():
         fig.tight_layout(rect=[0, 0, 1, 0.97])
         
         plot_name = '1and2_steps_per_min_morphology_overview.png'
-        plot_file = os.path.join(plot_path, plot_name)
+        plot_file = os.path.join(plot(output_path_0), plot_name)
         plt.savefig(plot_file, dpi=600, bbox_inches='tight')
         plt.show()
         plt.close()       
@@ -528,6 +535,19 @@ def stage_2():
         for col, new_col in gradient_targets.items():
             df[new_col] = np.gradient(df[col], df['time (ms)']).round(3)
         #--------------------------------------------------------------------
+
+        # Orientation angles (theta_x, theta_y, theta_z) in radians
+        #--------------------------------------------------------------------
+        # Gravity magnitude (~1 g if MPU6050 calibrated well)
+        df['g_mag'] = (np.sqrt(df['acc_g_x']**2 + df['acc_g_y']**2 + df['acc_g_z']**2)).round(3)
+
+        df['theta_x'] = (np.arccos(df['acc_g_x'] / df['g_mag'])).round(3)
+        df['theta_y'] = (np.arccos(df['acc_g_y'] / df['g_mag'])).round(3)
+        df['theta_z'] = (np.arccos(df['acc_g_z'] / df['g_mag'])).round(3)        
+
+        # Cleanup helper column
+        df.drop(columns=['g_mag'], inplace=True) 
+        #--------------------------------------------------------------------
         
         # ================= Window-based features ================
         # Features computed over defined windows of data
@@ -536,33 +556,6 @@ def stage_2():
         #--------------------------------------------------------------------       
         df['window_id'] = (df.index // window) # Create a new column for window IDs base on window size index
 
-        # Gravity vector (mean per window, still in m/s²)
-        grav_means = df.groupby('window_id')[['acceleration x', 'acceleration y', 'acceleration z']].mean()
-        grav_means = grav_means.rename(columns={
-            'acceleration x':'g_x_ms2',
-            'acceleration y':'g_y_ms2',
-            'acceleration z':'g_z_ms2'
-        }).round(3)
-
-        # Merge back to each row
-        df = df.merge(grav_means, left_on='window_id', right_index=True, how='left')
-
-        # Convert to g-units
-        df['g_x'] = (df['g_x_ms2'] / 9.80665).round(3)
-        df['g_y'] = (df['g_y_ms2'] / 9.80665).round(3)
-        df['g_z'] = (df['g_z_ms2'] / 9.80665).round(3)
-
-        # Gravity magnitude (~1 g if MPU6050 calibrated well)
-        df['g_mag'] = (np.sqrt(df['g_x']**2 + df['g_y']**2 + df['g_z']**2)).round(3)
-
-        df['theta_x'] = (np.degrees(np.arccos(df['g_x'] / df['g_mag']))).round(3)
-        df['theta_y'] = (np.degrees(np.arccos(df['g_y'] / df['g_mag']))).round(3)
-        df['theta_z'] = (np.degrees(np.arccos(df['g_z'] / df['g_mag']))).round(3)        
-
-        # Cleanup helper column
-        df.drop(columns=['g_x_ms2','g_y_ms2','g_z_ms2','g_mag','g_x','g_y','g_z'], inplace=True) 
-        #--------------------------------------------------------------------
-        
         # min, max, average
         #--------------------------------------------------------------------     
         sensor_cols = ['acc_g_x', 'acc_g_y', 'acc_g_z',
@@ -861,7 +854,6 @@ def stage_5():
     relieff = ReliefF(
         n_features_to_select=10,  # adjust as needed
         n_neighbors=100,
-        n_jobs=-1,
         discrete_threshold=10
     )
     relieff.fit_transform(X, y)
@@ -889,12 +881,14 @@ def stage_6():
     if matlab == 0:
         # ---- Paths ----
         weights_file = os.path.join(output_path_5, 'Python_relieff_feature_indices_weights.csv')     
-        out_file = os.path.join(output_path_5, 'X_train_top10_py.csv')
+        out_file1 = os.path.join(output_path_5, 'Python_X_train_top10.csv')
+        out_file2 = os.path.join(output_path_5, 'Python_Top10_w_comp_efficient.csv')
         i = 0  # Python counting is from 0
     else:
         # ---- Paths ----
         weights_file = os.path.join(output_path_5, 'Matlab_relieff_feature_indices_weights.csv')
-        out_file = os.path.join(output_path_5, 'X_train_top10_matlab.csv')
+        out_file1 = os.path.join(output_path_5, 'Matlab_X_train_top10.csv')
+        out_file2 = os.path.join(output_path_5, 'Matlab_Top10_w_comp_efficient.csv')
         i = 1  # Matlab counts from 1
 
     # ---- Step 1: Load weights ----
@@ -912,8 +906,8 @@ def stage_6():
 
     # ---- Step 4: Select top 10 from X_train ----
     X_top10 = X_train.iloc[:, top10_indices-i]
-    X_top10.to_csv(out_file, index=False, header=True)
-    print(f'Saved reduced X_train with top 10 features: {out_file}, shape {X_top10.shape}')
+    X_top10.to_csv(out_file1, index=False, header=True)
+    print(f'Saved reduced X_train with top 10 features: {out_file1}, shape {X_top10.shape}')
 
     # ---- Consistent color mapping ---- 
     cmap = plt.cm.get_cmap('tab20', len(feature_names)) 
@@ -950,7 +944,7 @@ def stage_6():
 
     plot_name1 = ['Python_relieff_weights_plot.png','Matlab_relieff_weights_plot.png']
     plt.tight_layout()
-    plot_path1 = os.path.join(output_path_5, plot_name1[i])
+    plot_path1 = os.path.join(plot(output_path_5), plot_name1[i])
     plt.savefig(plot_path1, dpi=600)
     plt.show()
     plt.close()
@@ -1031,12 +1025,17 @@ def stage_6():
         )
     
         plot_name2 = ['Python_Feats_CustomScore.png', 'Matlab_Feats_CustomScore.png']
-        plot_path2 = os.path.join(output_path_5, plot_name2[i])
+        plot_path2 = os.path.join(plot(output_path_5), plot_name2[i])
         plt.tight_layout()
         plt.savefig(plot_path2, dpi=600)
         plt.show()
         plt.close()
         print(f'Saved plot: {plot_path2}')
+        
+        # ---- Step 7: Select top 10 from X_train ----
+        X_top10 = X_train.iloc[:, top10]
+        X_top10.to_csv(out_file2, index=False, header=True)
+        print(f'Saved reduced X_train with top 10 features: {out_file2}, shape {X_top10.shape}')
  
     else:
         print('Warning: feats_computation_times.csv not found, skipping ESP32 plot.')
