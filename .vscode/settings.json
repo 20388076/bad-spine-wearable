@@ -69,5 +69,7 @@
         "mutex": "cpp",
         "cinttypes": "cpp"
     },
-    "C_Cpp.default.compilerPath": "C:\\win-builds\\bin\\gcc.exe"
+    "C_Cpp.default.compilerPath": "C:\\win-builds\\bin\\gcc.exe",
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.pythonProjects": []
 }

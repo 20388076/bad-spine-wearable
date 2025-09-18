@@ -47,7 +47,7 @@ float gyro_z_data[WINDOW] = {-0.016, -0.017, -0.017, -0.016, -0.017, -0.016, -0.
                              -0.017, -0.015, -0.015, -0.017, -0.015, -0.016, -0.016, -0.015};
 
 // ===========================================
-// Helper Functions (direct copy from add.txt)
+// Features Functions 
 // ===========================================
 
 // ---- Mean ----
@@ -156,6 +156,8 @@ compute_FFT_real(float* input, float* real_out, int size) {
     }
 }
 
+// ---- FFT Energy ----
+// Compute only magnitude
 void
 compute_FFT_mag(float* input, float* magnitude_out, int size) {
     FFT_real myFFT(size);
@@ -170,7 +172,6 @@ compute_FFT_mag(float* input, float* magnitude_out, int size) {
     }
 }
 
-// ---- FFT Energy ----
 float
 compute_fft_energy(float* magnitude, int len) {
     float sum = 0;
@@ -202,7 +203,7 @@ compute_sma_median(float* ax, float* ay, float* az, int n) {
     return vals[n / 2];
 }
 
-// ---- Vector Magnitude ----
+// ---- Median ----
 float
 compute_median(float* data, int n) {
     float copy[n];
@@ -230,6 +231,7 @@ compute_median(float* data, int n) {
     }
 }
 
+// ---- Vector Magnitude ----
 float
 vector_magnitude(float* x, float* y, float* z, int n) {
     float s[n];
@@ -313,23 +315,15 @@ setup() {
         acc_z_data[i] /= G_CONST;
     }
 
-    // Compute gravity vector and tilt angles
-    compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, theta_x, theta_y, theta_z);
-
     // Print header
     Serial.println(
-        "Acceleration Sum Vector Magnitude,Sum Vector Magnitude of Angular Velocity,Acceleration Cubic Product "
-        "Magnitude,Production Cubic Magnitude of Angular "
-        "Velocity,da_x/dT,da_y/dT,da_z/dT,dg_x/dT,dg_y/dT,dg_z/"
-        "dT,theta_x,theta_y,theta_z,acc_g_x_window_mean,acc_g_x_window_max,acc_g_x_window_min,acc_g_y_window_mean,acc_"
-        "g_y_window_max,acc_g_y_window_min,acc_g_z_window_mean,acc_g_z_window_max,acc_g_z_window_min,gyro_x_window_"
-        "mean,gyro_x_window_max,gyro_x_window_min,gyro_y_window_mean,gyro_y_window_max,gyro_y_window_min,gyro_z_window_"
-        "mean,gyro_z_window_max,gyro_z_window_min,Signal Magnitude Area Accelerometer,Signal Magnitude Area "
-        "Gyroscope,RMS_acc_g_x,RMS_acc_g_y,RMS_acc_g_z,RMS_gyro_x,RMS_gyro_y,RMS_gyro_z,MAD_acc_g_x,MAD_acc_g_y,MAD_"
-        "acc_g_z,MAD_gyro_x,MAD_gyro_y,MAD_gyro_z,VAR_acc_g_x,VAR_acc_g_y,VAR_acc_g_z,VAR_gyro_x,VAR_gyro_y,VAR_gyro_z,"
-        "STD_acc_g_x,STD_acc_g_y,STD_acc_g_z,STD_gyro_x,STD_gyro_y,STD_gyro_z,IQR_acc_g_x,IQR_acc_g_y,IQR_acc_g_z,IQR_"
-        "gyro_x,IQR_gyro_y,IQR_gyro_z,FFT_acc_g_x,FFT_acc_g_y,FFT_acc_g_z,FFT_gyro_x,FFT_gyro_y,FFT_gyro_z,ENERGY_acc_"
-        "g_x,ENERGY_acc_g_y,ENERGY_acc_g_z,ENERGY_gyro_x,ENERGY_gyro_y,ENERGY_gyro_z");
+        "SVM_a,SVM_g,CM_a,CM_g,jerk_x,jerk_y,jerk_z,accl_x,accl_y,accl_z,th_x,th_y,"
+        "th_z,ag_x_mean,ag_x_max,ag_x_min,ag_y_mean,ag_y_max,ag_y_min,ag_z_mean,ag_z_max,ag_z_min,g_x_mean,g_x_max,"
+        "g_x_min,g_y_mean,g_y_max,g_y_min,g_z_mean,g_z_max,g_z_min,SMA_a,SMA_g,RMS_ag_x,RMS_ag_y,RMS_ag_z,"
+        "RMS_g_x,RMS_g_y,RMS_g_z,MAD_ag_x,MAD_ag_y,MAD_ag_z,MAD_g_x,MAD_g_y,MAD_g_z,VAR_ag_x,VAR_ag_y,VAR_ag_z,"
+        "VAR_g_x,VAR_g_y,VAR_g_z,STD_ag_x,STD_ag_y,STD_ag_z,STD_g_x,STD_g_y,STD_g_z,IQR_ag_x,IQR_ag_y,IQR_ag_z,"
+        "IQR_g_x,IQR_g_y,IQR_g_z,FFT_ag_x,FFT_ag_y,FFT_ag_z,FFT_g_x,FFT_g_y,FFT_g_z,E_ag_x,E_ag_y,E_ag_z,E_g_x,E_g_y,E_"
+        "g_z");
 
     unsigned long start;
 
@@ -385,10 +379,11 @@ setup() {
 
     // --- f11–f13 (thetas already computed) ---
     start = micros();
+    compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, theta_x, theta_y, theta_z);
+    float elapsedTheta = micros() - start;
     float f11 = theta_x;
     float f12 = theta_y;
     float f13 = theta_z;
-    float elapsedTheta = micros() - start;
     float t11 = elapsedTheta / 3; // average time per theta
     float t12 = elapsedTheta / 3;
     float t13 = elapsedTheta / 3;
@@ -658,7 +653,7 @@ setup() {
     // --- f66 ---
     start = micros();
     compute_FFT_real(acc_z_data, fft_real_acc_z, WINDOW);
-    float f66 = fft_real_acc_z[8]; // 9th non-DC bin
+    float f66 = fft_real_acc_z[1]; //  float f66 = fft_real_acc_z[8]; // first non-DC bin
     float t66 = micros() - start;
 
     // --- f67 ---

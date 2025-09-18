@@ -42,7 +42,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy import unique
 from sklearn import preprocessing
-from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split, TimeSeriesSplit, cross_validate
 from scipy.stats import mode, randint, uniform
 from micromlgen import port
@@ -57,10 +56,10 @@ from docx import Document
 from docx.shared import Pt, Inches
 
 # import warnings
-# warnings.filterwarnings("ignore")
+# warnings.filterwarnings('ignore')
 
 def init_document(docx_filename):
-    """Create a new document if it doesn't exist, otherwise load the existing one."""
+    '''Create a new document if it doesn't exist, otherwise load the existing one.'''
     if os.path.exists(docx_filename):
         return Document(docx_filename)
     else:
@@ -69,6 +68,100 @@ def init_document(docx_filename):
 #====================================================================
 #========================== MAIN PROGRAM ============================
 #====================================================================
+
+def lower_bound(cv_results):
+    r"""
+    Calculate the lower bound within 1 standard deviation
+    of the best `mean_test_scores`.
+
+    Parameters
+    ----------
+    cv_results : dict of numpy(masked) ndarrays
+        See attribute cv_results_ of `GridSearchCV`
+
+    Returns
+    -------
+    float
+        Lower bound within 1 standard deviation of the
+        best `mean_test_score`.
+    """
+    best_score_idx = np.argmax(cv_results["mean_test_score"])
+
+    return (
+        cv_results["mean_test_score"][best_score_idx]
+        - cv_results["std_test_score"][best_score_idx]
+    )
+
+def best_low_complexity(cv_results):
+    r"""
+    Balance model complexity with cross-validated score.
+
+    Parameters
+    ----------
+    cv_results : dict of numpy(masked) ndarrays
+        See attribute cv_results_ of `GridSearchCV`.
+
+    Return
+    ------
+    int
+        Index of a model that has the fewest PCA components
+        while has its test score within 1 standard deviation of the best
+        `mean_test_score`.
+    """
+    threshold = lower_bound(cv_results)
+    candidate_idx = np.flatnonzero(cv_results["mean_test_score"] >= threshold)
+    best_idx = candidate_idx[
+        cv_results["param_reduce_dim__n_components"][candidate_idx].argmin()
+    ]
+    return best_idx
+
+def loadData(paths, index, input_file):
+    r'''
+    Load dataset X, y, feature names, and tag based on index from input_file.
+    
+    Parameters
+    ----------
+    paths : list
+        [stage4_path, stage6_path]
+    index : int
+        Row index of input_file
+    
+    Returns
+    -------
+    X : np.ndarray
+    y : np.ndarray
+    fNames : list
+        Feature names
+    Data_tag : str
+        Tag describing the dataset
+    '''
+
+    row = input_file.iloc[index]
+    X_file, y_file, Data_tag = row['X_file'], row['y_file'], row['Data_tag']
+
+    # First 3 datasets are from Stage 4, rest from Stage 6
+    base_path = paths[0] if index < 3 else paths[1]
+
+    X_path = os.path.join(base_path, X_file)
+    y_path = os.path.join(base_path, y_file)
+
+    # ---- Load X ----
+
+    X_data = pd.read_csv(X_path, dtype=np.float32)
+
+    fNames = X_data.columns.tolist()
+    X = X_data.to_numpy(dtype=np.float32)
+
+    # ---- Load y ----
+    y_data = pd.read_csv(y_path, header=None)
+
+    # If first row is text (e.g., 'label'), drop it
+    if isinstance(y_data.iloc[0, 0], str):
+        y_data = y_data.iloc[1:]
+
+    y = y_data.squeeze('columns').astype(np.int32).to_numpy()
+
+    return X, y, fNames, Data_tag
 
 cls() 
 docx_filename = 'classification_results.docx'
@@ -88,99 +181,111 @@ files = ['movement_0_feat.csv',
          'z_2step_per_min_feat.csv',
          'z_anomaly_detection_3_step_per_min_feat.csv',
     ]
-path = './3_FEATS/'
-path1 = './4_FEATS_COMBINED/'
-file = 'movement_0_feat.csv'
-df = pd.read_csv(path + file)
-fNames = df.columns[:].tolist()
+paths = ['./4_FEATS_COMBINED/','./5_FEATS_SELECTION/']
 
+input_file_train = pd.DataFrame([
+    ["all_raw_train.csv", "y_all_raw_train.csv", "RAW_DATA"],
+    ["all_norm_train.csv", "y_all_norm_train.csv", "G_RAW_DATA"],
+    ["X_train.csv", "y_train.csv", "ALL FEATURES"],
+    ["Matlab_X_train_top10.csv", "y_train.csv", "MATLAB RELIFF FEATURES 10 Best"],
+    ["Matlab_Top10_w_comp_efficient.csv", "y_train.csv", "MATLAB RELIFF Weight/Computation time 10 Best scored"]
+        ], columns=['X_file', 'y_file', 'Data_tag'])
+    
+input_file_test = pd.DataFrame([
+    ["all_raw_test.csv", "y_all_test.csv", "RAW_DATA"],
+    ["all_norm_test.csv", "y_all_norm_test.csv", "G_RAW_DATA"],
+    ["X_test.csv", "y_test.csv", "ALL FEATURES"],
+    ["Matlab_X_test_top10.csv", "y_test.csv", "MATLAB RELIFF FEATURES 10 Best"],
+    ["Matlab_Top10_w_comp_efficient.csv", "y_train.csv", "MATLAB RELIFF Weight/Computation time 10 Best scored"]
+        ], columns=['X_file', 'y_file', 'Data_tag'])
 
-for choice in range(0,2):
-    for index in range(0,2):
-        # X, y, fNames, Data_tag = loadData(path, files, index)
+import itertools
+
+for cl, index in itertools.product( range(2), range(5)):
         
-        # Paths for X and y (from Stage 4 outputs)
-        X_path = os.path.join(path1 , "X_train.csv")
-        y_path = os.path.join(path1 , "y_train.csv")
+        X, y, fNames, Data_tag_train = loadData(paths, index, input_file_train)
         
-        # Load without headers
-        X_data = pd.read_csv(X_path, header=None,dtype=np.float32)
-        y_data = pd.read_csv(y_path, header=None, dtype=np.int32).squeeze("columns")  # 1D Series
+        X_test, y_test, fNames, Data_tag_test = loadData(paths, index, input_file_test)
         
-        if index == 0:
-            # Convert to numpy arrays
-            X = X_data.to_numpy(dtype=np.float32)
-            y = y_data.to_numpy(dtype=np.int32)
-            Data_tag ='ALL FEATURES'
-        
-        elif index == 1:
-            # Convert to numpy arrays
-            X = X_data.to_numpy(dtype=np.float32)
-            y = y_data.to_numpy(dtype=np.int32)
-            
-            #column_indices = [ 28,  40, 25, 9, 27, 77, 36, 26, 39,16 ]      
-            column_indices = [66,	27,	65,	71,	29,	41,	77,	78,	74,	36]
-            column_indices = [i - 1 for i in column_indices]
-            X = X[:, column_indices]
-            Data_tag ='RELIFF FEATURES 10 Best'
         #============================== TRAIN/TEST SPLIT ==============================
-    
-        def TrainTestSplit(X, y, train_size, test_size):
-    
-            X_train_parts = []
-            X_test_parts = []
-            y_train_parts = []
-            y_test_parts = []
-    
-            for class_label in np.unique(y):
-                class_data = X[y == class_label]
-                X_train_class, X_test_class = train_test_split(
-                    class_data, train_size=train_size, test_size=test_size, shuffle=False
-                )
+        
+        def TrainTestSplit(X, y, train_size=0.75, test_size=0.25):
+            '''
+            Deterministic split per class: keeps order, no shuffle.
+            Train = first part of rows
+            Test  = last part of rows
+            '''
+            # Ensure y is a Series with same index
+            if isinstance(y, np.ndarray):
+                y = pd.Series(y, index=X.index, name='label')
+            elif isinstance(y, pd.DataFrame):
+                # flatten single-column DataFrame to Series
+                y = y.iloc[:, 0]
+
+            X_train_parts, X_test_parts = [], []
+            y_train_parts, y_test_parts = [], []
+
+            for class_label in y.unique():
+                class_mask = (y == class_label)
+                class_data = X.loc[class_mask]
+                class_labels = y.loc[class_mask]
+
+                n_total = len(class_data)
+                n_train = int(n_total * train_size)
+
+                # Deterministic split (no shuffle)
+                X_train_class = class_data.iloc[:n_train]
+                X_test_class  = class_data.iloc[n_train:]
+                y_train_class = class_labels.iloc[:n_train]
+                y_test_class  = class_labels.iloc[n_train:]
+
+                # Collect
                 X_train_parts.append(X_train_class)
                 X_test_parts.append(X_test_class)
-                y_train_parts.append(np.full(X_train_class.shape[0], class_label))
-                y_test_parts.append(np.full(X_test_class.shape[0], class_label))
-    
-            X_train = np.concatenate(X_train_parts, axis=0)
-            X_test = np.concatenate(X_test_parts, axis=0)
-            y_train = np.concatenate(y_train_parts, axis=0)
-            y_test = np.concatenate(y_test_parts, axis=0)
-    
+                y_train_parts.append(y_train_class)
+                y_test_parts.append(y_test_class)
+
+            # Concatenate back
+            X_train = pd.concat(X_train_parts, axis=0, ignore_index=True)
+            X_test  = pd.concat(X_test_parts, axis=0, ignore_index=True)
+            y_train = pd.concat(y_train_parts, axis=0, ignore_index=True)
+            y_test  = pd.concat(y_test_parts, axis=0, ignore_index=True)
+
+            # Safeguard: total lengths must match input
+            assert len(X_train) + len(X_test) == len(X), \
+                f'Split mismatch: {len(X)} rows in, {len(X_train)+len(X_test)} out'
+            assert len(y_train) + len(y_test) == len(y), \
+                f'Label mismatch: {len(y)} rows in, {len(y_train)+len(y_test)} out'
+
             return X_train, X_test, y_train, y_test
+
         # -------------------------------------------------------------------------
         
-        X_train, X_test, y_train, y_test = TrainTestSplit(X, y, train_size=0.7, test_size=0.3)
+        X_train, X_validation, y_train, y_validation = TrainTestSplit(X, y, train_size=0.7, validation_size=0.3)
         
         #================================ CLASSIFICATION ==============================
         
-        search = 1
+        search = 0
           
         if search == 0: # Hyperparameters Tuning
         
-            def classifiers(choice):
-                #if choice == 0: # Nearest Centroid
-                    #from sklearn.neighbors import KNeighborsClassifier
-                    #return KNeighborsClassifier(), 'KNN'
+            def classifiers(cl):
                     
-                if choice == 0: # Decision Tree 
+                if cl == 0: # Decision Tree 
                     from sklearn.tree import DecisionTreeClassifier  # Import Decision Tree Classifier
                     return DecisionTreeClassifier(), 'DecisionTree'
                     
-                elif choice == 1: # Random Forest 
+                elif cl == 1: # Random Forest 
                     from sklearn.ensemble import RandomForestClassifier
                     return RandomForestClassifier(), 'RandomForest'     
                     
-                #elif choice == 3: # eXtreme Gradient Boosting
-                    #from xgboost import XGBClassifier
-                    #return XGBClassifier(use_label_encoder=False, eval_metric='mlogloss'), 'XGBoost'
             
             start = time.time()
-            classifier, classifier_name = classifiers(choice)
+            classifier, classifier_name = classifiers(cl)
             classifier = classifier.fit(X_train, y_train)
             end = time.time()
             classification_time = end-start
-            y_pred = classifier.predict(X_test)
+            y_pred = classifier.predict(X_validation)
             
             # Define parameter grids
             param_grids = {
@@ -229,14 +334,14 @@ for choice in range(0,2):
             best_cv_score = search.best_score_
             
             # Save parameters
-            filename = f"best_params_{classifier_name}.json"
-            with open(filename, "w") as f:
+            filename = f'best_params_{classifier_name}.json'
+            with open(filename, 'w') as f:
                 json.dump(best_params, f)
         
             # Test set accuracy
             best_model = search.best_estimator_
-            y_pred = best_model.predict(X_test)
-            test_score = accuracy_score(y_test, y_pred)
+            y_pred = best_model.predict(X_validation)
+            test_score = accuracy_score(y_validation, y_pred)
         
             # Store for summary
             summary.append({
@@ -247,37 +352,37 @@ for choice in range(0,2):
                 'Saved As': filename
             })
             # Summary
-            print("\n Summary:")
+            print('\n Summary:')
             for s in summary:
-                print(f"\n {s['Classifier']}")
-                print(f"   CV Accuracy  : {s['CV Accuracy']}")
-                print(f"   Test Accuracy: {s['Test Accuracy']}")
-                print(f"   Best Params  : {s['Best Params']}")
-                print(f"   Saved To     : {s['Saved As']}")
+                print(f'\n {s['Classifier']}')
+                print(f'   CV Accuracy  : {s['CV Accuracy']}')
+                print(f'   Test Accuracy: {s['Test Accuracy']}')
+                print(f'   Best Params  : {s['Best Params']}')
+                print(f'   Saved To     : {s['Saved As']}')
                 
             word = 0   
             
         elif search == 1:
             
-            if choice == 0:
+            if cl == 0:
                 classifier_name = 'DecisionTree'
-            elif choice == 1:  
+            elif cl == 1:  
                 classifier_name = 'RandomForest'
             
-            def load_classifier(choice, params):
+            def load_classifier(cl, params):
 
-                if choice == 0:
+                if cl == 0:
                     from sklearn.tree import DecisionTreeClassifier
                     return DecisionTreeClassifier(**params)
-                elif choice == 1:
+                elif cl == 1:
                     from sklearn.ensemble import RandomForestClassifier
                     return RandomForestClassifier(**params)
             
-            json_file = f"best_params_{classifier_name}.json"
+            json_file = f'best_params_{classifier_name}.json'
             try:
-                with open(json_file, "r") as f:
+                with open(json_file, 'r') as f:
                     params = json.load(f)
-                classifier = load_classifier(choice, params)
+                classifier = load_classifier(cl, params)
                 start = time.time()
                 classifier.fit(X_train, y_train)
                 end = time.time()
@@ -296,10 +401,10 @@ for choice in range(0,2):
             os.makedirs(save_dir, exist_ok=True)
             
             # Full path to save header file
-            save_path = os.path.join(save_dir, f"{classifier_name}.h")
+            save_path = os.path.join(save_dir, f'{classifier_name}.h')
             
             # Write the file
-            with open(save_path, "w", encoding="utf-8") as f:
+            with open(save_path, 'w', encoding='utf-8') as f:
                 f.write(model_code)
                 
             word = 1
@@ -307,14 +412,14 @@ for choice in range(0,2):
         #========================== PLOTING AND WORD SAVING ==========================
 
         accuracy = accuracy_score(y_test, y_pred) * 100
-        acc = f"Accuracy: {accuracy:.2f} % "
+        acc = f'Accuracy: {accuracy:.2f} % '
         #accuracy = print_confusion_matrix(y_test, y_pred)
         print('=' * 23 + ' CLASSIFICATION RESULTS ' + '=' * 23)
         print('CLASSIFIER: ', classifier_name)
         print(acc)
         print('Feature used :', Data_tag)
         print('Classification Time: ', np.asarray(classification_time).round(3),'seconds')
-        print(f"Test set X__test shape: {X_test.shape}")
+        print(f'Test set X__test shape: {X_test.shape}')
         
         # Helper to simulate console output and capture it
         def capture_output_and_plot(classifier_name, accuracy, Data_tag, 
@@ -345,11 +450,11 @@ for choice in range(0,2):
                     X_test,
                     y_test,
                     labels=labels,                                      
-                    display_labels=[f"Class {i}" for i in labels],       
-                    normalize="true",
+                    display_labels=[f'Class {i}' for i in labels],       
+                    normalize='true',
                     cmap=plt.cm.Blues,                                    # row-wise %
                     xticks_rotation=90,
-                    values_format=".1%",  
+                    values_format='.1%',  
                     ax=ax            # show as percents
                     )
                 

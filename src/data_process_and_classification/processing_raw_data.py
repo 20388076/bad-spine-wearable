@@ -41,172 +41,130 @@ This program processes raw sensor data (accelerometer and gyroscope) from CSV fi
 It supports 4 main stages of data processing:    
 0. Data Cleaning: Removes unnecessary lines from raw CSV files and saves cleaned data and plots them.
     The results are saved in new CSV files with '_clean' suffix
-1. Data Processing only for 1 and 2 steps per min: Reads cleaned data, filters it based on time, and duplicates sensor data to fill up to the original file length.
-    It saves the processed data in new CSV files with '_cln_pr' suffix.
-2. Feature Extraction: Computes various features from the cleaned data: vector magnitudes,
+1. Feature Extraction: Computes various features from the cleaned data: vector magnitudes,
     cubic products, gradients, window-based statistics and features: min, mean, max, signal magnitude area, root mean square,
     mean absolute deviation, variance, standard deviation, interquartile range, fast Fourier transform, and energy.
     The features which computed over defined windows of data with 'window' variable.
     The results are saved in new CSV files with '_feat_prepr' suffix.
-3. FFT Feature Processing: Reads the preprocessed feature files, computes the standard deviation of FFT features across all datasets,
+2. FFT Feature Processing: Reads the preprocessed feature files, computes the standard deviation of FFT features across all datasets,
     and replaces the FFT values in each dataset with the value from the line that has the highest standard deviation.
     The results are saved in new CSV files with '_feat' suffix.
-4. Build Machine Learning - ML dataset (X_data, y_data): Combines all feature files into a single dataset, assigns class labels based on file names,
+3. Build Machine Learning - ML dataset (X_data, y_data): Combines all feature files into a single dataset, assigns class labels based on file names,
     and saves the combined features and labels into 'X_data.csv' and 'y_data.csv', splits combine data to train - test datasets for ML, with the same 
     pattern to be followed for raw and g converted data.
-5. Feature Selection using ReliefF algorithm: Applies the ReliefF feature selection algorithm to the training dataset,
+4. Feature Selection using ReliefF algorithm: Applies the ReliefF feature selection algorithm to the training dataset,
     selects the top features based on their importance scores, and saves the reduced feature set and feature weights to CSV files.
     The results are saved in 'X_train_reduced_idx_py.csv' and 'Python_relieff_feature_indices_weights.csv'.
-6. Plotting the weight order best features and combine the ESP32 computation time.
+
+You can skip the stage 4 using the Matlab ReliefF program named: reliefF_feature_selection.m
+by setting the 'matlab' variable to 1. After running the Matlab program, press enter to continue to stage 6.
+
+5. Plotting the weight order best features and combine the ESP32 computation time.
     The results are saved in 'Relieff_Feature_Weights.png' and 'ESP32_computation_time.png'.
     Also, returns the indices of the 10 best selected weight based features for Edge AI implementation.
 
 To run the program, set the 'data_process' variable set the variable accordingly to the desired operation:
 - 0 for Data Cleaning
-- 1 for Data Processing
-- 2 for Feature Extraction
-- 3 for FFT Feature Processing
-- 4 for Build ML dataset (X_data, y_data) 
-- 5 for Feature Selection using ReliefF algorithm
-- 6 for Plotting the weight order best features and combine the ESP32 computation time.
+- 1 for Feature Extraction
+- 2 for FFT Feature Processing
+- 3 for Build ML dataset (X_data, y_data) 
+- 4 for Feature Selection using ReliefF algorithm
+- 5 for Plotting the weight order best features and combine the ESP32 computation time.
 To run all stages sequentially, set 'auto' to 1. To run only one stage, set 'auto' to 0.
-The 'window' variable defines the size of the window for all data processes. 
+The 'window' variable defines the size of the number of the measurements - rows for all calulation of window-based features and processes.
 '''
-# ------------------------------ Data Process Option --------------------------
-# 0: raw -> clean; 
-# 1: clean(1 step/min & 2 steps/min) -> processed(1 step/min & 2 steps/min); 
-# 2: clean -> features preprocessed; 
-# 3: features preprocessed -> features final; 4: features final -> X_data, y_data; 5: X_data, y_data -> ReliefF selected features; 
-# 6: Plotting the weight order best features and combine the ESP32 computation time.
-data_process = 6
+
+# ----------------------------- Window Size -----------------------------------
+# Define window in sec for data trimming to fit window size and window-based features
+window = 2 # sec
+# Available Datasets
+# 1) 9.71 Hz
+# 2) 10 Hz
+# 3) 50 Hz
+sampleRate = 9.71 # Sample rate in Hz     <-- Change this value to set sample rate
+window_size = int(round(window * sampleRate))
+print(f'Window size set to {window_size} rows for sample rate {sampleRate} Hz and window time {window} sec.')
 # ------------------------------ Auto Runner Option ---------------------------
 # 0: run only one stage; 1: run all stages
-auto = 0
-# ----------------------------- Window Size -----------------------------------
-# Define window size for data trimming to fit window size and window-based features
-window = 16 
+auto = 1
+# ------------------------------ Data Process Option --------------------------
+# 0: raw -> clean;  
+# 1: clean -> features preprocessed; 
+# 2: features preprocessed -> features final; 
+# 3: features final -> X_data, y_data; 
+# 4: X_data, y_data -> ReliefF selected features; 
+# 5: Plotting the weight order best features and combine the ESP32 computation time.
+
+data_process = 5
 # ----------------------------- Plotting Option -------------------------------
 pl = 1  # 0: no plots; 1: plots
-
 # ----------------------------- Matlab Option for ReleifF -------------------------------
-matlab = 0 # 0: python ReleifF ; 1: Matlab ReleifF 
+matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF 
 
 # ---------------- File Configuration ----------------
 
-def TrainTestSplit(X, y, train_size, test_size):
-    from sklearn.model_selection import train_test_split
-    X_train_parts = []
-    X_test_parts = []
-    y_train_parts = []
-    y_test_parts = []
-
-    for class_label in np.unique(y):
-        class_data = X[y == class_label]
-        X_train_class, X_test_class = train_test_split(
-            class_data, train_size=train_size, test_size=test_size, shuffle=False
-        )
-        X_train_parts.append(X_train_class)
-        X_test_parts.append(X_test_class)
-        y_train_parts.append(np.full(X_train_class.shape[0], class_label))
-        y_test_parts.append(np.full(X_test_class.shape[0], class_label))
-
-    X_train = np.concatenate(X_train_parts, axis=0)
-    X_test = np.concatenate(X_test_parts, axis=0)
-    y_train = np.concatenate(y_train_parts, axis=0)
-    y_test = np.concatenate(y_test_parts, axis=0)
-
-    return X_train, X_test, y_train, y_test
-
-
 # ---------------- Import Libraries ------------------
-import os
 import pandas as pd
 import numpy as np
 # ----------------------------------------------------
 # Define the location for saving processed files
 # --- files for data_process = 0 ---
 
-input_path_0 = './0_RAW/'
-output_path_0 = './1_CLEAN/'
+input_path_0 = f'./0_RAW/{sampleRate}_Hz_sampling/' 
+output_path_0 = f'./1_CLEAN/{sampleRate}_Hz_sampling/'
 
 # Create output directory if it doesn't exist
 os.makedirs(output_path_0, exist_ok=True) 
 
 input_file_0 = [
-    'movement_0.csv', 'x_axis_with_random_movements.csv',
-    'y_axis_with_random_movements.csv', 'z_axis_with_random_movements.csv',
-    'x_1step_per_min.csv', 'y_1step_per_min.csv', 'z_1step_per_min.csv',
-    'x_2step_per_min.csv', 'y_2step_per_min.csv', 'z_2step_per_min.csv',
-    'x_anomaly_detection_3_step_per_min.csv', 'y_anomaly_detection_3_step_per_min.csv',
-    'z_anomaly_detection_3_step_per_min.csv'
+    f'x_1_0mv_{sampleRate}.csv',f'y_1_0mv_{sampleRate}.csv',f'z_1_0mv_{sampleRate}.csv',
+    f'x_2_r_mv_{sampleRate}.csv',f'y_2_r_mv_{sampleRate}.csv', f'z_2_r_mv_{sampleRate}.csv',
+    f'x_3_1st_p_min_{sampleRate}.csv', f'y_3_1st_p_min_{sampleRate}.csv', f'z_3_1st_p_min_{sampleRate}.csv',
+    f'x_4_2st_p_min_{sampleRate}.csv', f'y_4_2st_p_min_{sampleRate}.csv', f'z_4_2st_p_min_{sampleRate}.csv',
+    f'x_5_3st_p_min_w_ad_{sampleRate}.csv', f'y_5_3st_p_min_w_ad_{sampleRate}.csv',f'z_5_3st_p_min_w_ad_{sampleRate}.csv'
 ]
 output_file_0 = [f.replace('.csv', '_clean.csv') for f in input_file_0]
 
 # --- files for data_process = 1 ---
 
 input_path_1 = output_path_0
-output_path_1 = output_path_0
+output_path_1 = f'./2_FEATS_PREPROCESSSED/{sampleRate}_Hz_sampling/'
 
-input_file_1  = pd.DataFrame([
-    ['x_1step_per_min_clean.csv', 'x_2step_per_min_clean.csv'],
-    ['y_1step_per_min_clean.csv', 'y_2step_per_min_clean.csv'],
-    ['z_1step_per_min_clean.csv', 'z_2step_per_min_clean.csv']
-])
+# Create output directory if it doesn't exist
+os.makedirs(output_path_1, exist_ok=True) 
 
-output_names = pd.DataFrame([
-    ['x_1step_per_min_cln_pr.csv', 'x_2step_per_min_cln_pr.csv'],
-    ['y_1step_per_min_cln_pr.csv', 'y_2step_per_min_cln_pr.csv'],
-    ['z_1step_per_min_cln_pr.csv', 'z_2step_per_min_cln_pr.csv']
-])
+input_file_1 = output_file_0
+output_file_1 = [f.replace('.csv', '_feat_prepr.csv') for f in input_file_0]
 
 # --- files for data_process = 2 ---
 
-input_path_2 = output_path_0
-output_path_2 = './2_FEATS_PREPROCESSSED/'
+input_path_2 = output_path_1
+output_path_2 = f'./3_FEATS/{sampleRate}_Hz_sampling/'
 
 # Create output directory if it doesn't exist
 os.makedirs(output_path_2, exist_ok=True) 
 
-input_file_2 =  [
-    'movement_0_clean.csv', 'x_axis_with_random_movements_clean.csv',
-    'y_axis_with_random_movements_clean.csv', 'z_axis_with_random_movements_clean.csv',
-    'x_1step_per_min_cln_pr.csv', 'y_1step_per_min_cln_pr.csv', 'z_1step_per_min_cln_pr.csv',
-    'x_2step_per_min_cln_pr.csv', 'y_2step_per_min_cln_pr.csv', 'z_2step_per_min_cln_pr.csv',
-    'x_anomaly_detection_3_step_per_min_clean.csv', 'y_anomaly_detection_3_step_per_min_clean.csv',
-    'z_anomaly_detection_3_step_per_min_clean.csv'
-]
-output_file_2 = [f.replace('.csv', '_feat_prepr.csv') for f in input_file_0]
+input_file_2 = output_file_1
+output_file_2 = [f.replace('.csv', '_feat.csv') for f in input_file_0]
 
 # --- files for data_process = 3 ---
 
 input_path_3 = output_path_2
-output_path_3 = './3_FEATS/'
+output_path_3 = f'./4_FEATS_COMBINED/{sampleRate}_Hz_sampling/'
+os.makedirs(output_path_3, exist_ok=True)
 
-# Create output directory if it doesn't exist
-os.makedirs(output_path_3, exist_ok=True) 
-
-input_file_3 = output_file_2
-output_file_3 = [f.replace('.csv', '_feat.csv') for f in input_file_0]
-
-# --- files for data_process = 4 ---
+# --- files for data_process = 4 & 5 ---
 
 input_path_4 = output_path_3
-output_path_4 = './4_FEATS_COMBINED/'
-os.makedirs(output_path_4, exist_ok=True)
-
-# --- files for data_process = 5 ---
-
-input_path_5 = output_path_4
-output_path_5 = './5_FEATS_SELECTION/'
+output_path_4 = f'./5_FEATS_SELECTION/{sampleRate}_Hz_sampling/'
 
 # Create output directory if it doesn't exist
-os.makedirs(output_path_5, exist_ok=True) 
+os.makedirs(output_path_4, exist_ok=True) 
 
-input_file_5 = ['X_train.csv',
-                'y_train.csv',
+input_file_4 = [f'X_train_{sampleRate}.csv',
+                f'y_train_{sampleRate}.csv',
                 ]
-output_file_5 = 'X_train_reduced_idx_py.csv'
-weights_file = 'Python_relieff_feature_indices_weights.csv'
+weights_file = f'Python_relieff_feature_indices_weights_{sampleRate}.csv'
 
 # --- files for plots ---
 
@@ -234,8 +192,8 @@ def stage_0():
     # ================= Step 1: Read & Clean =================
     
     train_labels = [
-        'time (ms)', 'acceleration x', 'acceleration y', 'acceleration z',
-        'gyro x', 'gyro y', 'gyro z'
+        't (ms)', 'a_x', 'a_y', 'a_z',
+        'g_x', 'g_y', 'g_z'
     ]
     
     datasets = []
@@ -246,7 +204,7 @@ def stage_0():
         out_file = os.path.join(output_path_0, output_file_0[file_idx])
         print(f'Processing file: {input_file_0[file_idx]}')
 
-        # Number of extra lines to remove at the start of the file
+        # Number of extra lines to remove at the start of each file
         extra_lines = 17
 
         # Remove first extra lines
@@ -262,11 +220,11 @@ def stage_0():
         df = pd.read_csv(out_file, names=train_labels)
         
         # Find starting time and sort
-        start_time = df['time (ms)'].dropna().min()
-        df = df.sort_values('time (ms)').reset_index(drop=True)
+        start_time = df['t (ms)'].dropna().min()
+        df = df.sort_values('t (ms)').reset_index(drop=True)
         
         # Limit time range to 1 hour and 1 min so the window value does not effect the wanted data (wanted data =< 1 hour data)
-        df = df[df['time (ms)'] <= 3660000 + start_time]  
+        df = df[df['t (ms)'] <= 3660000 + start_time]  
         
         # Store for later processing
         datasets.append(df)
@@ -275,12 +233,12 @@ def stage_0():
     # ================= Step 2: Find min rows (multiple of window) =================
     
     min_rows = min(row_counts)
-    adjusted_rows = (min_rows // window) * window  # largest multiple of window <= min_rows
+    adjusted_rows = (min_rows // window_size) * window_size  # largest multiple of window <= min_rows
     
     if adjusted_rows != min_rows:
-        print(f'\nMinimum rows {min_rows} adjusted down to {adjusted_rows} to fit window size {window}.\n')
+        print(f'\nMinimum rows {min_rows} adjusted down to {adjusted_rows} to fit window size {window_size}.\n')
     else:
-        print(f'\nMinimum rows {min_rows} fits perfectly into windows of size {window}.\n')
+        print(f'\nMinimum rows {min_rows} fits perfectly into windows of size {window_size}.\n')
     
     # ================= Step 3: Trim and Save clean dataset to disk =================
     
@@ -295,255 +253,127 @@ def stage_0():
     # ================= Step 4: Plotting all datasets for inspection =================
     
     if pl == 1:     
-        # Plot sensor data
-        plt.style.use('ggplot')
-        fig, axs = plt.subplots(len(datasets), 2, figsize=(14, 2 * len(datasets)), sharex=False)
+        # Load all datasets
+        datasets = {fname: pd.read_csv(output_path_0 + fname) for fname in output_file_0}
         
-        if len(datasets) == 1:  # Handle single dataset case
-            axs = [axs]
+        # -------------------------------
+        # Axis-specific plots
+        # -------------------------------
+        axis_labels = {'x': 'X Axis', 'y': 'Y Axis', 'z': 'Z Axis'}
+        step_conditions = {
+            0: f'1_0mv_{sampleRate}_clean.csv',
+            1: f'2_r_mv_{sampleRate}_clean.csv',   
+            2: f'3_1st_p_min_{sampleRate}_clean.csv',
+            3: f'4_2st_p_min_{sampleRate}_clean.csv',
+            4: f'5_3st_p_min_w_ad_{sampleRate}_clean.csv'
+        }
         
-        for i, df in enumerate(datasets):
-            # Convert time to minutes
-            time_minutes = (df['time (ms)'] - df['time (ms)'].min()) / 60000.0
+        for axis, axis_name in axis_labels.items():
+            fig, axs = plt.subplots(len(step_conditions), 2, figsize=(12, 14), sharex=True)
+            
+            for row, (step, suffix) in enumerate(step_conditions.items()):
+                fname = f'{axis}_{suffix}'
+                df = datasets[fname]
+                time = (df['t (ms)'] - df['t (ms)'].min()) / 60000.0
         
-            # Accelerometer subplot
-            axs[i][0].plot(time_minutes, df['acceleration x'], label='Acc X', color='red')
-            axs[i][0].plot(time_minutes, df['acceleration y'], label='Acc Y', color='green')
-            axs[i][0].plot(time_minutes, df['acceleration z'], label='Acc Z', color='blue')
-            axs[i][0].legend(loc='upper right', fontsize=8)
-            axs[i][0].set_title(f'{input_file_0[i]} - Accelerometer', fontsize=9)
+                # Left subplot = Accelerometer (a_x, a_y, a_z)
+                axs[row, 0].plot(time, df['a_x'], color='red', label='Acc X')
+                axs[row, 0].plot(time, df['a_y'], color='green', label='Acc Y')
+                axs[row, 0].plot(time, df['a_z'], color='blue', label='Acc Z')
+                if step == 0 or 1:
+                    axs[row, 0].set_title(f'{axis_name} - {step} step/min with random movements - Accelerometer', fontsize=11)
+                elif step == 4:
+                    axs[row, 0].set_title(f'{axis_name} - {step} step/min with anomaly - Accelerometer', fontsize=11)
+                else:
+                    axs[row, 0].set_title(f'{axis_name} - {step} step/min - Accelerometer', fontsize=11)
+                axs[row, 0].set_ylabel('Acceleration (m/s$^2$)', fontsize=10)
+                axs[row, 0].legend(fontsize=8)
         
-            # X ticks and label
-            axs[i][0].set_xticks([0, 30, 60])
-            axs[i][0].set_xticklabels(['0', '30', '60'], fontsize=7)
-            if i == len(datasets) - 1:  # Only label bottom plots
-                axs[i][0].set_xlabel('Time (min)', fontsize=9)
+                # Right subplot = Gyroscope (g_x, g_y, g_z)
+                axs[row, 1].plot(time, df['g_x'], color='red', label='Gyro X')
+                axs[row, 1].plot(time, df['g_y'], color='green', label='Gyro Y')
+                axs[row, 1].plot(time, df['g_z'], color='blue', label='Gyro Z')
+                if step == 0:
+                    axs[row, 1].set_title(f'{axis_name} - {step} step/min with random movements - Gyroscope', fontsize=11)
+                elif step == 3:
+                    axs[row, 1].set_title(f'{axis_name} - {step} step/min with anomaly - Gyroscope', fontsize=11)
+                else:
+                    axs[row, 1].set_title(f'{axis_name} - {step} step/min - Gyroscope', fontsize=11)
+                axs[row, 1].set_ylabel('Angular Velocity (rad/s)', fontsize=10)
+                axs[row, 1].legend(fontsize=8)
         
-            # Y ticks with rotation
-            acc_min = round(min(df[['acceleration x','acceleration y','acceleration z']].min()), 2)
-            acc_max = round(max(df[['acceleration x','acceleration y','acceleration z']].max()), 2)
-            axs[i][0].set_yticks([acc_min, 0, acc_max])
-            axs[i][0].set_yticklabels([str(acc_min), '0', str(acc_max)], fontsize=7, rotation=45)
+                # X-label only at bottom row
+                if row == len(step_conditions) - 1:
+                    axs[row, 0].set_xlabel('Time (min)', fontsize=10)
+                    axs[row, 1].set_xlabel('Time (min)', fontsize=10)
         
-            # Gyroscope subplot
-            axs[i][1].plot(time_minutes, df['gyro x'], label='Gyro X', color='red')
-            axs[i][1].plot(time_minutes, df['gyro y'], label='Gyro Y', color='green')
-            axs[i][1].plot(time_minutes, df['gyro z'], label='Gyro Z', color='blue')
-            axs[i][1].legend(loc='upper right', fontsize=8)
-            axs[i][1].set_title(f'{input_file_0[i]} - Gyroscope', fontsize=9)
-        
-            # X ticks and label
-            axs[i][1].set_xticks([0, 30, 60])
-            axs[i][1].set_xticklabels(['0', '30', '60'], fontsize=7)
-            if i == len(datasets) - 1:  # Only label bottom plots
-                axs[i][1].set_xlabel('Time (min)', fontsize=9)
-        
-            # Y ticks with rotation
-            gyro_min = round(min(df[['gyro x','gyro y','gyro z']].min()), 2)
-            gyro_max = round(max(df[['gyro x','gyro y','gyro z']].max()), 2)
-            axs[i][1].set_yticks([gyro_min, 0, gyro_max])
-            axs[i][1].set_yticklabels([str(gyro_min), '0', str(gyro_max)], fontsize=7, rotation=45)
-    
-        fig.suptitle('Accelerometer & Gyroscope Data Morphology', fontsize=14)
-        fig.tight_layout(rect=[0, 0, 1, 0.97])
-        
-        plot_name = 'data_morphology_overview.png'
-        plot_path_all = os.path.join(plot(output_path_0), plot_name)
-        plt.savefig(plot_path_all, dpi=600, bbox_inches='tight')
-        plt.show()
-        plt.close()
-        print(f'File saved as {plot_name}')
-        print('=' * 70)
-    
-# ---------------- Data Process 1: Preprocess  1 step/min, 2 step/min datasets----------------
+            fig.suptitle(f'{axis_name} - Step Conditions', fontsize=14)
+            plt.tight_layout(rect=[0, 0, 1, 0.96])
+            
+            plot_name = f'{axis}_axis_plot.png'
+            plot_path_all = os.path.join(plot(output_path_0), plot_name)
+            plt.savefig(plot_path_all, dpi=600)
+            plt.show()
+
+# ---------------- Data Process 1: Feature Extraction ----------------
 def stage_1():
     print('\n======= Data Process: 1 =======\n')
-    # ---------------- Import Libraries ------------------
-    import matplotlib.pyplot as plt
-    # ----------------------------------------------------
-    
-    # ================= Step 1: Repeat 1 step/min, 2 step/min datasets movements =================
-    
-    # Loop over each row (sensor: x, y, z)
-    for axis_index in range(input_file_1 .shape[0]):
-        
-        # Loop over each column (1 step/min, 2 step/min)
-        for rate_index in range(input_file_1 .shape[1]):
-            
-            # ---- Check input files before processing ----
-            file_name = input_file_1 .iloc[axis_index, rate_index]
-            print(f'Processing file: {file_name}')
-
-            try:
-                df = pd.read_csv(input_path_1 + file_name)
-            except FileNotFoundError:
-                raise FileNotFoundError(f'No _clean.csv files found in {input_path_1}. Cannot build cln_pr.csv.')
-            
-            # Read the full file to extract timestamps
-            original_df = df.copy()
-            
-            # Extract the original timestamps
-            time_col = original_df['time (ms)'].values
-            
-            # Filter and duplicate sensor data (without affecting time)
-            start_time = df['time (ms)'].dropna().min()
-            cutoff_time = [2400000 + start_time, 1200000 + start_time]
-            cut_df = df[df['time (ms)'] <= cutoff_time[rate_index]].reset_index(drop=True)
-            
-            # Prepare to fill up to the original file length
-            sensor_columns = df.columns.drop('time (ms)')
-            sensor_data = []
-            
-            i = 0
-            while len(sensor_data) < len(time_col):
-                for j in range(len(cut_df)):
-                    if len(sensor_data) >= len(time_col):
-                        break
-                    sensor_data.append(cut_df.loc[j, sensor_columns].values)
-                i += 1
-            
-            # Convert to DataFrame and truncate to match original time length
-            sensor_df = pd.DataFrame(sensor_data[:len(time_col)], columns=sensor_columns)
-            
-            # Combine with original timestamps
-            final_df = pd.DataFrame()
-            final_df['time (ms)'] = time_col
-            for col in sensor_columns:
-                final_df[col] = sensor_df[col]
-            output_name = output_names.iloc[axis_index, rate_index]        
-            final_df.to_csv(output_path_1+output_name, index=False)
-            
-            # Print output file name
-            print(f'Saving file: {output_name}\n')
-    
-    # ================= Step 2: Plotting all datasets for inspection =================        
-    
-    if pl == 1:   
-        
-        # Gather processed datasets for plotting
-        processed_datasets = []
-        processed_names = []
-        
-        for axis_index in range(input_file_1.shape[0]):
-            for rate_index in range(input_file_1.shape[1]):
-                file_name = output_names.iloc[axis_index, rate_index]
-                file_path = os.path.join(output_path_1, file_name)
-                if os.path.isfile(file_path):
-                    df = pd.read_csv(file_path)
-                    processed_datasets.append(df)
-                    processed_names.append(file_name)
-        
-        # Create subplots
-        fig, axs = plt.subplots(len(processed_datasets), 2, figsize=(14, 2 * len(processed_datasets)), sharex=False)
-        if len(processed_datasets) == 1:
-            axs = [axs]
-        
-        for i, df in enumerate(processed_datasets):
-            # Convert time to minutes
-            time_minutes = (df['time (ms)'] - df['time (ms)'].min()) / 60000.0
-        
-            # Accelerometer subplot
-            axs[i][0].plot(time_minutes, df['acceleration x'], label='Acc X', color='red')
-            axs[i][0].plot(time_minutes, df['acceleration y'], label='Acc Y', color='green')
-            axs[i][0].plot(time_minutes, df['acceleration z'], label='Acc Z', color='blue')
-            axs[i][0].legend(loc='upper right', fontsize=8)
-            axs[i][0].set_title(f'{processed_names[i]} - Accelerometer', fontsize=9)
-        
-            axs[i][0].set_xticks([0, 30, 60])
-            axs[i][0].set_xticklabels(['0', '30', '60'], fontsize=7)
-            if i == len(processed_datasets) - 1:
-                axs[i][0].set_xlabel('Time (min)', fontsize=9)
-        
-            acc_min = round(min(df[['acceleration x','acceleration y','acceleration z']].min()), 2)
-            acc_max = round(max(df[['acceleration x','acceleration y','acceleration z']].max()), 2)
-            axs[i][0].set_yticks([acc_min, 0, acc_max])
-            axs[i][0].set_yticklabels([str(acc_min), '0', str(acc_max)], fontsize=7, rotation=45)
-        
-            # Gyroscope subplot
-            axs[i][1].plot(time_minutes, df['gyro x'], label='Gyro X', color='red')
-            axs[i][1].plot(time_minutes, df['gyro y'], label='Gyro Y', color='green')
-            axs[i][1].plot(time_minutes, df['gyro z'], label='Gyro Z', color='blue')
-            axs[i][1].legend(loc='upper right', fontsize=8)
-            axs[i][1].set_title(f'{processed_names[i]} - Gyroscope', fontsize=9)
-        
-            axs[i][1].set_xticks([0, 30, 60])
-            axs[i][1].set_xticklabels(['0', '30', '60'], fontsize=7)
-            if i == len(processed_datasets) - 1:
-                axs[i][1].set_xlabel('Time (min)', fontsize=9)
-        
-            gyro_min = round(min(df[['gyro x','gyro y','gyro z']].min()), 2)
-            gyro_max = round(max(df[['gyro x','gyro y','gyro z']].max()), 2)
-            axs[i][1].set_yticks([gyro_min, 0, gyro_max])
-            axs[i][1].set_yticklabels([str(gyro_min), '0', str(gyro_max)], fontsize=7, rotation=45)
-        
-        fig.suptitle('Stage 1: Accelerometer & Gyroscope Data Morphology', fontsize=14)
-        fig.tight_layout(rect=[0, 0, 1, 0.97])
-        
-        plot_name = '1and2_steps_per_min_morphology_overview.png'
-        plot_file = os.path.join(plot(output_path_0), plot_name)
-        plt.savefig(plot_file, dpi=600, bbox_inches='tight')
-        plt.show()
-        plt.close()       
-
-# ---------------- Data Process 2: Feature Extraction ----------------
-def stage_2():
-    print('\n======= Data Process: 2 =======\n')
     # ---------------- Import Libraries ------------------
     from scipy.fft import fft
     from scipy.stats import iqr
     # ----------------------------------------------------
     
     # ---- Check input files before processing ----
-    for f in input_file_2:
-        path = os.path.join(input_path_2, f)
+    for f in input_file_1:
+        path = os.path.join(input_path_1, f)
         if not os.path.isfile(path):
-            raise FileNotFoundError(f'No _clean.csv files found in {input_path_2}. Cannot build feat_prepr.csv.')
+            raise FileNotFoundError(f'No _clean.csv files found in {input_path_1}. Cannot build feat_prepr.csv.')
     
-    for file_idx in range(len(input_file_2)):  
-        df = pd.read_csv(input_path_2 + input_file_2[file_idx])
-        print(f'Processing file: {input_file_2[file_idx]}')
+    for file_idx in range(len(input_file_1)):  
+        df = pd.read_csv(input_path_1 + input_file_1[file_idx])
+        print(f'Processing file: {input_file_1[file_idx]}')
         
         # Normalize acceleration to acceleration in g (9.80665 m/s^2)
         #--------------------------------------------------------------------
-        df['acc_g_x'] = (df['acceleration x'] / 9.80665).round(3)
-        df['acc_g_y'] = (df['acceleration y'] / 9.80665).round(3)
-        df['acc_g_z'] = (df['acceleration z'] / 9.80665).round(3)
+        df['ag_x'] = (df['a_x'] / 9.80665).round(3)
+        df['ag_y'] = (df['a_y'] / 9.80665).round(3)
+        df['ag_z'] = (df['a_z'] / 9.80665).round(3)
         #--------------------------------------------------------------------
         
         # Compute vector magnitudes
         #--------------------------------------------------------------------
-        df['Acceleration Sum Vector Magnitude'] = np.sqrt(
-            df['acc_g_x']**2 + df['acc_g_y']**2 + df['acc_g_z']**2).round(3)
-        df['Sum Vector Magnitude of Angular Velocity'] = np.sqrt(
-            df['gyro x']**2 + df['gyro y']**2 + df['gyro z']**2).round(3)
+        df['SVM_a'] = np.sqrt(
+            df['ag_x']**2 + df['ag_y']**2 + df['ag_z']**2).round(3)
+        df['SVM_g'] = np.sqrt(
+            df['g_x']**2 + df['g_y']**2 + df['g_z']**2).round(3)
         #--------------------------------------------------------------------
         
         # Cubic product features
         #--------------------------------------------------------------------
-        df['Acceleration Cubic Product Magnitude'] = (
-            abs(df['acc_g_x'] * df['acc_g_y'] * df['acc_g_z']) ** (1/3)).round(3)
-        df['Production Cubic Magnitude of Angular Velocity'] = (
-            abs(df['gyro x'] * df['gyro y'] * df['gyro z']) ** (1/3)).round(3)
+        df['CM_a'] = (
+            abs(df['ag_x'] * df['ag_y'] * df['ag_z']) ** (1/3)).round(3)
+        df['CM_g'] = (
+            abs(df['g_x'] * df['g_y'] * df['g_z']) ** (1/3)).round(3)
         #--------------------------------------------------------------------
         
         # Gradient features dt
         #--------------------------------------------------------------------
         gradient_targets = {
-            'acc_g_x': 'da_x/dT', 'acc_g_y': 'da_y/dT', 'acc_g_z': 'da_z/dT',
-            'gyro x': 'dg_x/dT', 'gyro y': 'dg_y/dT', 'gyro z': 'dg_z/dT'
+            'ag_x': 'jerk_x', 'ag_y': 'jerk_y', 'ag_z': 'jerk_z',
+            'g_x': 'accl_x', 'g_y': 'accl_y', 'g_z': 'accl_z'
         }
         for col, new_col in gradient_targets.items():
-            df[new_col] = np.gradient(df[col], df['time (ms)']).round(3)
+            df[new_col] = np.gradient(df[col], df['t (ms)']).round(3)
         #--------------------------------------------------------------------
 
         # Orientation angles (theta_x, theta_y, theta_z) in radians
         #--------------------------------------------------------------------
         # Gravity magnitude (~1 g if MPU6050 calibrated well)
-        df['g_mag'] = (np.sqrt(df['acc_g_x']**2 + df['acc_g_y']**2 + df['acc_g_z']**2)).round(3)
+        df['g_mag'] = (np.sqrt(df['ag_x']**2 + df['ag_y']**2 + df['ag_z']**2)).round(3)
 
-        df['theta_x'] = (np.arccos(df['acc_g_x'] / df['g_mag'])).round(3)
-        df['theta_y'] = (np.arccos(df['acc_g_y'] / df['g_mag'])).round(3)
-        df['theta_z'] = (np.arccos(df['acc_g_z'] / df['g_mag'])).round(3)        
+        df['th_x'] = (np.arccos(df['ag_x'] / df['g_mag'])).round(3)
+        df['th_y'] = (np.arccos(df['ag_y'] / df['g_mag'])).round(3)
+        df['th_z'] = (np.arccos(df['ag_z'] / df['g_mag'])).round(3)        
 
         # Cleanup helper column
         df.drop(columns=['g_mag'], inplace=True) 
@@ -554,16 +384,16 @@ def stage_2():
         
         # Gravity vector features
         #--------------------------------------------------------------------       
-        df['window_id'] = (df.index // window) # Create a new column for window IDs base on window size index
+        df['window_id'] = (df.index //window_size) # Create a new column for window IDs base on window size index
 
         # min, max, average
         #--------------------------------------------------------------------     
-        sensor_cols = ['acc_g_x', 'acc_g_y', 'acc_g_z',
-                       'gyro x', 'gyro y', 'gyro z']
+        sensor_cols = ['ag_x', 'ag_y', 'ag_z',
+                       'g_x', 'g_y', 'g_z']
         agg_funcs = ['mean', 'max', 'min']
         for col in sensor_cols:
             for func in agg_funcs:
-                new_col = f'{col.replace(' ', '_')}_window_{func}'
+                new_col = f'{col.replace(' ', '_')}_{func}'
                 df[new_col] = df.groupby('window_id')[col].transform(func).round(3) 
         #--------------------------------------------------------------------        
         
@@ -571,10 +401,10 @@ def stage_2():
         #-------------------------------------------------------------------- 
         # Define sensor groups and feature names
         sensor_cols2 = [
-            ['acc_g_x', 'acc_g_y', 'acc_g_z'],
-            ['gyro x', 'gyro y', 'gyro z']
+            ['ag_x', 'ag_y', 'ag_z'],
+            ['g_x', 'g_y', 'g_z']
         ]    
-        feats = ['Signal Magnitude Area Accelerometer', 'Signal Magnitude Area Gyroscope']
+        feats = ['SMA_a', 'SMA_g']
         for i, cols in enumerate(sensor_cols2):
             
             # Calculate row-wise magnitude sum: |x| + |y| + |z|
@@ -600,9 +430,9 @@ def stage_2():
             for window_id, group in grouped:
                 for col in columns_to_process:
                     if choice == 0: # RMS
-                        val = np.sqrt(sum(group[col] ** 2)/ window) 
+                        val = np.sqrt(sum(group[col] ** 2)/ window_size) 
                     elif choice == 1: # MAD
-                        val = (sum(np.abs(group[col] - group[col].mean()))) / window
+                        val = (sum(np.abs(group[col] - group[col].mean()))) / window_size
                     elif choice == 2: # VAR
                         val = np.var(group[col])
                     elif choice == 3: # STD
@@ -611,43 +441,43 @@ def stage_2():
                         val = iqr(group[col])
                     elif choice == 5: # FFT
                         val = np.real(fft(group[col]))
-                    elif choice == 6: # ENERGY
-                        val = (np.sum(abs(fft(group[col])**2))) / window
+                    elif choice == 6: # E
+                        val = (np.sum(abs(fft(group[col])**2))) / window_size
                     df.loc[df['window_id'] == window_id, f'{feats[choice]}_{col}'] = val
             df[[f'{feats[choice]}_{col}' for col in columns_to_process]] = df[[f'{feats[choice]}_{col}' 
                                                                                for col in columns_to_process]].round(3)
             return df
         
-        sensor_cols = ['acc_g_x', 'acc_g_y', 'acc_g_z', 
-                       'gyro x', 'gyro y', 'gyro z']
-        feats = ['RMS','MAD','VAR','STD','IQR','FFT','ENERGY']
+        sensor_cols = ['ag_x', 'ag_y', 'ag_z', 
+                       'g_x', 'g_y', 'g_z']
+        feats = ['RMS','MAD','VAR','STD','IQR','FFT','E']
         
     
         # Root Mean Square (RMS), Mean Absolute Deviation (MAD), Variance (VAR), Standard Deviation (STD), 
-        # Interquartile Range (IQR), Fast Fourier Transform (FFT), Energy  
+        # Interquartile Range (IQR), Fast Fourier Transform (FFT), Energy (E) 
         #--------------------------------------------------------------------
         for choice in range(len(feats)):
             df = compute_feat_per_window(df, sensor_cols, feats, choice)
         #--------------------------------------------------------------------
         df.drop(columns=['window_id'], inplace=True)
         # Saving feat to CSV
-        df.to_csv(output_path_2 + output_file_2[file_idx], index=False)
+        df.to_csv(output_path_1 + output_file_1[file_idx], index=False)
         
         # Print output file name
-        print(f'File saved as: {output_file_2[file_idx]}\n')
+        print(f'File saved as: {output_file_1[file_idx]}\n')
 
-# ---------------- Data Process 3: ----------------
-def stage_3():
-    print('\n======= Data Process: 3 =======\n')
+# ---------------- Data Process 2: ----------------
+def stage_2():
+    print('\n======= Data Process: 2 =======\n')
      # ================= Step 1: Find STDs in FFTs features =================
-    fft_std_path = os.path.join(input_path_3, 'fft_std.csv')
+    fft_std_path = os.path.join(input_path_2, 'fft_std.csv')
     # ------- _feat_prepr.csv' Checker --------
-    feat_files = sorted([f for f in os.listdir(input_path_3) if f.endswith('_feat_prepr.csv')])
+    feat_files = sorted([f for f in os.listdir(input_path_2) if f.endswith('_feat_prepr.csv')])
     if not feat_files:
-        raise FileNotFoundError(f'No _feat_prepr.csv files found in {input_path_3}. Cannot build fft_std.csv.')
+        raise FileNotFoundError(f'No _feat_prepr.csv files found in {input_path_2}. Cannot build fft_std.csv.')
     
     # reading first file header to discover FFT columns
-    first_df = pd.read_csv(os.path.join(input_path_3, feat_files[0]), nrows=0)
+    first_df = pd.read_csv(os.path.join(input_path_2, feat_files[0]), nrows=0)
     fft_columns = [c for c in first_df.columns if c.startswith('FFT_')]
     if not fft_columns:
         raise ValueError('No FFT_ columns found in feature files.')
@@ -655,7 +485,7 @@ def stage_3():
     # reading only FFT columns from all files
     dfs = []
     for f in feat_files:
-        p = os.path.join(input_path_3, f)
+        p = os.path.join(input_path_2, f)
         df_tmp = pd.read_csv(p, usecols=fft_columns)
         dfs.append(df_tmp)
         print(f'Loaded FFT cols from {f}, shape {df_tmp.shape}')
@@ -670,17 +500,17 @@ def stage_3():
     n_rows = len(fft_std_df)
     
     # Number of full windows (it will skip an incomplete tail window) for those who will use only Data Process 3
-    n_full_windows = n_rows // window
-    if n_full_windows != n_rows / window:
-        raise ValueError('window is larger than the number of rows; cannot process.')
-    print(f'Using window = {window}; number of full windows = {n_full_windows}; skipping tail if incomplete.')
+    n_full_windows = n_rows // window_size
+    if n_full_windows != n_rows / window_size:
+        raise ValueError('window size is larger than the number of rows; cannot process.')
+    print(f'Using window = {window_size}; number of full windows = {n_full_windows}; skipping tail if incomplete.')
     
     # Prepare replacement: for each FFT column compute the position-score from fft_std
     best_idx_map = {}
     for col in fft_columns:
-        scores = np.zeros(window, dtype=int)
+        scores = np.zeros(window_size, dtype=int)
         for w in range(n_full_windows):
-            chunk = fft_std_df[col].iloc[w*window:(w+1)*window].values
+            chunk = fft_std_df[col].iloc[w*window_size:(w+1)*window_size].values
             # exclude the first row of each chunk
             arg = int(np.nanargmax(chunk[1:])) + 1  # +1 to shift index since we sliced from [1:]
             scores[arg] += 1
@@ -692,8 +522,8 @@ def stage_3():
     # ================= Step 3: FFT replacement with the FFT line via the biggest standard deviation of all datasets =================    
     
     # Processing files loop for FFT replacement                                                                                                                                                                                                            
-    for file_idx in range(len(input_file_3)): 
-        df = pd.read_csv(input_path_3 + input_file_3[file_idx])
+    for file_idx in range(len(input_file_2)): 
+        df = pd.read_csv(input_path_2 + input_file_2[file_idx])
         print('=' * 70 + '\n'+ f'Processing file: {input_file_2[file_idx]}\n'+'=' * 70)
         
         # Validate df has the FFT columns
@@ -707,24 +537,76 @@ def stage_3():
             best_idx = best_idx_map[col]
             new_col = df[col].to_numpy(copy=True) # Build new column values by copying df value at (window_start + best_idx) into whole window
             for w in range(n_full_windows):
-                val = df[col].iat[w*window + best_idx]
-                new_col[w*window:(w+1)*window] = val
+                val = df[col].iat[w*window_size+ best_idx]
+                new_col[w*window_size:(w+1)*window_size] = val
                 
             # If there is an incomplete tail (n_rows % window != 0), we leave those rows unchanged
             df[col] = new_col # Replace df column with new values
 
         # ---- Save aggregated dataset ----
-        out_file = os.path.join(output_path_3, output_file_3[file_idx])
+        out_file = os.path.join(output_path_2, output_file_2[file_idx])
         df.to_csv(out_file, index=False)
         # Print output file name
-        print(f'Saved aggregated file: {output_file_3[file_idx]} with shape {df.shape}')
+        print(f'Saved aggregated file: {output_file_2[file_idx]} with shape {df.shape}')
 
-# ---------------- Data Process 4: ----------------
-def stage_4():
-    print('\n======= Data Process: 4 =======\n')
+# ---------------- Data Process 3: ----------------
+def stage_3():
+    print('\n======= Data Process: 3 =======\n')
+    
+    # ------------------- Sub Function -------------------
+    def TrainTestSplit(X, y, train_size=0.75, test_size=0.25):
+        '''
+        Deterministic split per class: keeps order, no shuffle.
+        Train = first part of rows
+        Test  = last part of rows
+        '''
+        # Ensure y is a Series with same index
+        if isinstance(y, np.ndarray):
+            y = pd.Series(y, index=X.index, name='label')
+        elif isinstance(y, pd.DataFrame):
+            # flatten single-column DataFrame to Series
+            y = y.iloc[:, 0]
 
+        X_train_parts, X_test_parts = [], []
+        y_train_parts, y_test_parts = [], []
+
+        for class_label in y.unique():
+            class_mask = (y == class_label)
+            class_data = X.loc[class_mask]
+            class_labels = y.loc[class_mask]
+
+            n_total = len(class_data)
+            n_train = int(n_total * train_size)
+
+            # Deterministic split (no shuffle)
+            X_train_class = class_data.iloc[:n_train]
+            X_test_class  = class_data.iloc[n_train:]
+            y_train_class = class_labels.iloc[:n_train]
+            y_test_class  = class_labels.iloc[n_train:]
+
+            # Collect
+            X_train_parts.append(X_train_class)
+            X_test_parts.append(X_test_class)
+            y_train_parts.append(y_train_class)
+            y_test_parts.append(y_test_class)
+
+        # Concatenate back
+        X_train = pd.concat(X_train_parts, axis=0, ignore_index=True)
+        X_test  = pd.concat(X_test_parts, axis=0, ignore_index=True)
+        y_train = pd.concat(y_train_parts, axis=0, ignore_index=True)
+        y_test  = pd.concat(y_test_parts, axis=0, ignore_index=True)
+
+        # Safeguard: total lengths must match input
+        assert len(X_train) + len(X_test) == len(X), \
+            f'Split mismatch: {len(X)} rows in, {len(X_train)+len(X_test)} out'
+        assert len(y_train) + len(y_test) == len(y), \
+            f'Label mismatch: {len(y)} rows in, {len(y_train)+len(y_test)} out'
+
+        return X_train, X_test, y_train, y_test
+    # ----------------------------------------------------
+    
     # Collect all processed feature files from Stage 3
-    feat_files = output_file_3  # already defined in your script
+    feat_files = output_file_2  
     
     all_X = []
     all_y = []
@@ -735,14 +617,14 @@ def stage_4():
     
     for file_idx, f in enumerate(feat_files):
         print(f'Processing file: {f}')
-        df = pd.read_csv(os.path.join(input_path_4, f))
+        df = pd.read_csv(os.path.join(input_path_3, f))
         
         # Explicit column selection for raw and normallize datasets
-        df1 = df[['acceleration x', 'acceleration y', 'acceleration z',
-                  'gyro x', 'gyro y', 'gyro z']]
+        df1 = df[['a_x', 'a_y', 'a_z',
+                  'g_x', 'g_y', 'g_z']].astype(np.float32)
         
-        df2 = df[['acc_g_x', 'acc_g_y', 'acc_g_z',
-                  'gyro x', 'gyro y', 'gyro z']]
+        df2 = df[['ag_x', 'ag_y', 'ag_z',
+                  'g_x', 'g_y', 'g_z']].astype(np.float32)
         
         all_raw_data.append(df1)
         all_norm_data.append(df2)
@@ -752,14 +634,14 @@ def stage_4():
         norm_labels.append(np.full(len(df2), file_idx))
         
         # Drop raw sensor columns (first 9)
-        df = df.drop(columns=['time (ms)','acceleration x', 'acceleration y', 'acceleration z',
-                              'gyro x', 'gyro y', 'gyro z','acc_g_x','acc_g_y', 'acc_g_z'], errors='ignore')
+        df = df.drop(columns=['t (ms)','a_x', 'a_y', 'a_z',
+                              'g_x', 'g_y', 'g_z','ag_x','ag_y', 'ag_z'], errors='ignore')
         
         # Window-based aggregation
-        df['window_id'] = df.index // window
+        df['window_id'] = df.index // window_size
     
         # Columns for derivative features
-        derivative_cols = ['da_x/dT', 'da_y/dT', 'da_z/dT']
+        derivative_cols = ['jerk_x', 'jerk_y', 'jerk_z','accl_x','accl_y','accl_z']
         agg_dict = {}
     
         for col in df.columns:
@@ -785,9 +667,10 @@ def stage_4():
     
     raw_y = np.concatenate(raw_labels)
     norm_y = np.concatenate(norm_labels)
-    raw_y = pd.DataFrame(raw_y)
-    norm_y = pd.DataFrame(norm_y)
-    
+
+    raw_y = pd.Series(np.concatenate(raw_labels), name='label')
+    norm_y = pd.Series(np.concatenate(norm_labels), name='label')
+
     # Train - Test split before feature selection for models accuracy evaluation
     train_size=0.75
     test_size=0.25
@@ -796,48 +679,50 @@ def stage_4():
     raw_train, raw_test, y_raw_train, y_raw_test = TrainTestSplit(all_raw_data, raw_y, train_size, test_size)
     norm_train, norm_test, y_norm_train, y_norm_test = TrainTestSplit(all_norm_data, norm_y, train_size, test_size)
 
-    # ---- Save datasets (NO headers, NO index) ----
+    # ---- Save datasets (headers, NO index) ----
     save_items = {
         # aggregated features
-        'X_data.csv': X_data,
-        'y_data.csv': y_data.to_frame(),   # ensure it has name 'label'
-        'X_train.csv': pd.DataFrame(X_train, columns=X_data.columns),
-        'y_train.csv': pd.DataFrame(y_train, columns=['label']),
-        'X_test.csv': pd.DataFrame(X_test, columns=X_data.columns),
-        'y_test.csv': pd.DataFrame(y_test, columns=['label']),
+        f'X_data_{sampleRate}.csv': X_data,
+        f'y_data_{sampleRate}.csv': y_data.to_frame(),   # ensure it has name 'label'
+        f'X_train_{sampleRate}.csv': pd.DataFrame(X_train, columns=X_data.columns, dtype=np.float32),
+        f'y_train_{sampleRate}.csv': pd.DataFrame(y_train, columns=['label']),
+        f'X_test_{sampleRate}.csv': pd.DataFrame(X_test, columns=X_data.columns, dtype=np.float32),
+        f'y_test_{sampleRate}.csv': pd.DataFrame(y_test, columns=['label']),
     
         # raw version
-        'all_raw_data.csv': all_raw_data,
-        'y_all_raw_data.csv': pd.DataFrame(raw_y, columns=['label']),
-        'all_raw_train.csv': pd.DataFrame(raw_train, columns=all_raw_data.columns),
-        'y_all_raw_train.csv': pd.DataFrame(y_raw_train, columns=['label']),
-        'all_raw_test.csv': pd.DataFrame(raw_test, columns=all_raw_data.columns),
-        'y_all_raw_test.csv': pd.DataFrame(y_raw_test, columns=['label']),
+        f'all_raw_data_{sampleRate}.csv': all_raw_data,
+        f'y_all_raw_data_{sampleRate}.csv': pd.DataFrame(raw_y, columns=['label']),
+        f'all_raw_train_{sampleRate}.csv': pd.DataFrame(raw_train, columns=all_raw_data.columns, dtype=np.float32),
+        f'y_all_raw_train_{sampleRate}.csv': pd.DataFrame(y_raw_train, columns=['label']),
+        f'all_raw_test_{sampleRate}.csv': pd.DataFrame(raw_test, columns=all_raw_data.columns, dtype=np.float32),
+        f'y_all_raw_test_{sampleRate}.csv': pd.DataFrame(y_raw_test, columns=['label']),
     
         # norm version
-        'all_norm_data.csv': all_norm_data,
-        'y_all_norm_data.csv': pd.DataFrame(norm_y, columns=['label']),
-        'all_norm_train.csv': pd.DataFrame(norm_train, columns=all_norm_data.columns),
-        'y_all_norm_train.csv': pd.DataFrame(y_norm_train, columns=['label']),
-        'all_norm_test.csv': pd.DataFrame(norm_test, columns=all_norm_data.columns),
-        'y_all_norm_test.csv': pd.DataFrame(y_norm_test, columns=['label']),
+        f'all_norm_data_{sampleRate}.csv': all_norm_data,
+        f'y_all_norm_data_{sampleRate}.csv': pd.DataFrame(norm_y, columns=['label']),
+        f'all_norm_train_{sampleRate}.csv': pd.DataFrame(norm_train, columns=all_norm_data.columns, dtype=np.float32),
+        f'y_all_norm_train_{sampleRate}.csv': pd.DataFrame(y_norm_train, columns=['label']),
+        f'all_norm_test_{sampleRate}.csv': pd.DataFrame(norm_test, columns=all_norm_data.columns, dtype=np.float32),
+        f'y_all_norm_test_{sampleRate}.csv': pd.DataFrame(y_norm_test, columns=['label']),
     }
 
     for fname, df in save_items.items():
-        path = os.path.join(output_path_4, fname)
+        path = os.path.join(output_path_3, fname)
+
         df.to_csv(path, index=False, header=True)
         print(f'Saved {fname} with shape {df.shape}')
+        
 
-# ---------------- Data Process 5: ReliefF Feature Selection ----------------
-def stage_5():
-    print('\n======= Data Process: 5 =======\n') 
+# ---------------- Data Process 4: ReliefF Feature Selection ----------------
+def stage_4():
+    print('\n======= Data Process: 4 =======\n') 
     # ---------------- Import Libraries ------------------     
     from skrebate import ReliefF
     # ----------------------------------------------------
 
     # Paths for X and y (from Stage 4 outputs)
-    X_path = os.path.join(input_path_5, input_file_5[0])
-    y_path = os.path.join(input_path_5, input_file_5[1])
+    X_path = os.path.join(input_path_4, input_file_4[0])
+    y_path = os.path.join(input_path_4, input_file_4[1])
     
     # Load without headers
     X_data = pd.read_csv(X_path,header=None, skiprows=1)
@@ -854,7 +739,8 @@ def stage_5():
     relieff = ReliefF(
         n_features_to_select=10,  # adjust as needed
         n_neighbors=100,
-        discrete_threshold=10
+        discrete_threshold=10,
+        n_jobs = -1
     )
     relieff.fit_transform(X, y)
     
@@ -866,103 +752,94 @@ def stage_5():
         'Feature_Index': idx_sorted,
         'ReliefF_Weight': weights[idx_sorted]
     }).round(6)
-    weights_df.to_csv(os.path.join(output_path_5, weights_file), index=False,float_format='%.6f')
+    weights_df.to_csv(os.path.join(output_path_4, weights_file), index=False,float_format='%.6f')
     
     print(f'Saved ReliefF weights and indices: {weights_file}')
 
-# ---------------- Data Process 6: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
-def stage_6():
-    print('\n======= Data Process: 6 =======\n')
+# ---------------- Data Process 5: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
+def stage_5():
+    print('\n======= Data Process: 5 =======\n')
+    
     import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
-    import numpy as np
-    from math import sqrt
 
+
+    # ---- Step 0: Set file paths and index mode ----
     if matlab == 0:
-        # ---- Paths ----
-        weights_file = os.path.join(output_path_5, 'Python_relieff_feature_indices_weights.csv')     
-        out_file1 = os.path.join(output_path_5, 'Python_X_train_top10.csv')
-        out_file2 = os.path.join(output_path_5, 'Python_Top10_w_comp_efficient.csv')
-        i = 0  # Python counting is from 0
+        weights_file = os.path.join(output_path_4, f'Python_relieff_feature_indices_weights_{sampleRate}.csv')     
+        base_index = 0  # already 0-based
     else:
-        # ---- Paths ----
-        weights_file = os.path.join(output_path_5, 'Matlab_relieff_feature_indices_weights.csv')
-        out_file1 = os.path.join(output_path_5, 'Matlab_X_train_top10.csv')
-        out_file2 = os.path.join(output_path_5, 'Matlab_Top10_w_comp_efficient.csv')
-        i = 1  # Matlab counts from 1
-
+        weights_file = os.path.join(output_path_4, f'Matlab_relieff_feature_indices_weights_{sampleRate}.csv')
+        base_index = 1  # MATLAB output is 1-based, will subtract later
+    
+    names = ['Python', 'Matlab']
     # ---- Step 1: Load weights ----
     weights_df = pd.read_csv(weights_file)
     print(f'Loaded ReliefF weights with shape {weights_df.shape}')
 
-    # ---- Step 2: Load X_train with headers ----
-    X_train_file = os.path.join(output_path_4, 'X_train.csv')
-    X_train = pd.read_csv(X_train_file)   # must have headers from stage_4
-    feature_names = X_train.columns
+    # Normalize indices to 0-based
+    weights_df['Feature_Index'] = weights_df['Feature_Index'] - base_index
 
-    # ---- Step 3: Extract top 10 feature indices ----
-    top10_indices = weights_df['Feature_Index'].head(10).to_numpy()
-    print('Top 10 feature indices:', top10_indices - i)
+    # ---- Step 2: Load features ----
+    X_train = pd.read_csv(os.path.join(output_path_3, f'X_train_{sampleRate}.csv'))
+    X_test  = pd.read_csv(os.path.join(output_path_3, f'X_test_{sampleRate}.csv'))
+    feature_names = X_train.columns.to_list()
 
-    # ---- Step 4: Select top 10 from X_train ----
-    X_top10 = X_train.iloc[:, top10_indices-i]
-    X_top10.to_csv(out_file1, index=False, header=True)
-    print(f'Saved reduced X_train with top 10 features: {out_file1}, shape {X_top10.shape}')
+    # ---- Step 3: Order features by ReliefF weight ----
+    weights_sorted = weights_df.sort_values('ReliefF_Weight', ascending=False).reset_index(drop=True)
+    sorted_indices = weights_sorted['Feature_Index'].to_numpy()
 
-    # ---- Consistent color mapping ---- 
-    cmap = plt.cm.get_cmap('tab20', len(feature_names)) 
-    color_map = {idx: cmap(idx) for idx in range(len(feature_names))}
+    # Reorder train/test
+    X_train_sorted = X_train.iloc[:, sorted_indices]
+    X_test_sorted  = X_test.iloc[:, sorted_indices]
 
-    # ---- Step 5: Plot index vs weight ----
-    plt.figure(figsize=(14,6))
-    bars = plt.bar(
-        weights_df['Feature_Index'] - i,
-        weights_df['ReliefF_Weight'],
-        color=[color_map[idx - i] for idx in weights_df['Feature_Index']]
+    # Save reordered datasets
+    X_train_sorted.to_csv(os.path.join(output_path_4, f'{names[base_index]}_X_train_weight_ordered_{sampleRate}.csv'), index=False, header=True)
+    X_test_sorted.to_csv(os.path.join(output_path_4, f'{names[base_index]}_X_test_weight_ordered_{sampleRate}.csv'), index=False, header=True)
+
+    # ---- Step 4: Top-10 features ----
+    top10_indices = sorted_indices[:10]
+
+    # ---- Step 5: Plot ReliefF weights ----
+    weights_plot = weights_df.copy().sort_values('ReliefF_Weight', ascending=False).reset_index(drop=True)
+    weights_plot['Feature_Name'] = [feature_names[i] for i in weights_plot['Feature_Index']]
+
+    cmap = plt.cm.get_cmap('tab20', len(feature_names))
+    fig, ax = plt.subplots(figsize=(10, 10))
+    bars = ax.barh(
+        np.arange(len(weights_plot)),
+        weights_plot['ReliefF_Weight'],
+        color=[cmap(idx) for idx in weights_plot['Feature_Index']],
+        edgecolor='black'
     )
 
-    for bar, weight in zip(bars, weights_df['ReliefF_Weight']):
-        plt.text(bar.get_x() + bar.get_width()/2,
-                 bar.get_height(),
-                 f'{weight:.3f}',
-                 va='top', fontsize=6, rotation=90)
+    # Highlight top-10
+    for ix, feat_idx in enumerate(weights_plot['Feature_Index']):
+        if feat_idx in top10_indices:
+            bars[ix].set_edgecolor('cyan')
+            bars[ix].set_linewidth(2)
 
-    names = ['Python', 'Matlab']
-    plt.xlabel('Feature Index')
-    plt.ylabel('ReliefF Weight')
-    plt.title(f'{names[i]} ReliefF Feature Importance')
-
-    legend_handles = [
-        mpatches.Patch(color=color_map[idx - i], label=f'{idx}: {feature_names[idx - i]}')
-        for idx in weights_df['Feature_Index']
-    ]
-    plt.legend(
-        handles=legend_handles,
-        fontsize=6.5, loc='upper left', bbox_to_anchor=(1.02, 1),
-        ncol=2, frameon=False, title=" Best Feature Index - Name"
-    )
-
-    plot_name1 = ['Python_relieff_weights_plot.png','Matlab_relieff_weights_plot.png']
+    ax.set_yticks(np.arange(len(weights_plot)))
+    ax.set_yticklabels(weights_plot['Feature_Name'], fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel('ReliefF Weight')
+    ax.set_ylabel('Features')
+    ax.set_title(f'{names[base_index]} ReliefF Feature Importance')
     plt.tight_layout()
-    plot_path1 = os.path.join(plot(output_path_5), plot_name1[i])
-    plt.savefig(plot_path1, dpi=600)
+    plt.savefig(os.path.join(plot(output_path_4), f'{names[base_index]}_relieff_weights_plot_{sampleRate}.png'), dpi=600)
     plt.show()
-    plt.close()
-    print(f'Saved plot: {plot_path1}')
 
     # ---- Step 6: ESP32 Feature Computation Time vs ReliefF Weights ----
- 
-    times_file = os.path.join(input_path_0, 'feats_computation_times.csv')
+    times_file = os.path.join(input_path_0, f'feats_computation_times_{sampleRate}.csv')
     if os.path.isfile(times_file):
         times = pd.read_csv(times_file, header=None).iloc[0].to_numpy()
         times = np.log1p(times)   # safer than log
         if len(times) != len(feature_names):
-            raise ValueError(f"Mismatch: {len(times)} times vs {len(feature_names)} features")
+            raise ValueError(f'Mismatch: {len(times)} times vs {len(feature_names)} features')
     
         # --- Load weights ---
-        weights_df = pd.read_csv(weights_file)
-        weights_df['Feature_Index'] = weights_df['Feature_Index'] - i  # 0-based
-        feature_names = X_train.columns.to_list()
+        #weights_df = pd.read_csv(weights_file)
+        weights_df['Feature_Index'] = weights_df['Feature_Index'] - base_index  # 0-based
+        #feature_names = X_train.columns.to_list()
     
         # Merge into DataFrame
         df = pd.DataFrame({
@@ -982,64 +859,137 @@ def stage_6():
     
         # Sort by score
         df_sorted = df.sort_values('Score', ascending=False).reset_index(drop=True)
-        colors = [color_map[idx] for idx in df_sorted['Feature_Index']]
     
-        # Top-10 by score (shift +1 so indices display 1–75)
-        top10 = (df_sorted['Feature_Index'].head(10) + 1).tolist()
+        # Top-10 by score (shift - i so indices display 0–74)
+        top10 = (df_sorted['Feature_Index'].head(10) - base_index).tolist()
     
         # --- Plot ---
-        fig, ax = plt.subplots(figsize=(14, 6))
-        bars = ax.bar(
+        fig, ax = plt.subplots(figsize=(10, 10))
+        bars = ax.barh(
             np.arange(len(df_sorted)),
             df_sorted['Score'],
-            color=colors,
+            color=[cmap(idx) for idx in weights_plot['Feature_Index']],
             edgecolor='black'
         )
-    
-        # Label each bar with feature index (1–75)
-        for ix, (bar, feat_idx) in enumerate(zip(bars, df_sorted['Feature_Index'])):
-            feat_label = feat_idx + 1  # shift for human-readable indexing
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.001,
-                    str(feat_label), ha='center', fontsize=6,
-                    color='cyan' if feat_label in top10 else 'black')
-    
+            
         # Highlight top-10
         for ix, feat_idx in enumerate(df_sorted['Feature_Index']):
-            if (feat_idx + 1) in top10:
+            if (feat_idx - base_index) in top10:
                 bars[ix].set_edgecolor('cyan')
                 bars[ix].set_linewidth(2)
+                
+        # Put feature names directly on y-axis
+        ax.set_yticks(np.arange(len(df_sorted)))
+        ax.grid(visible = True, which='both', axis='x',linestyle='--', linewidth=0.5)
+        ax.set_yticklabels(df_sorted['Feature_Name'], fontsize=9)
+        
+        # Flip so higher indices (bottom of df_sorted) appear at the bottom
+        ax.invert_yaxis()
+        
+        ax.set_xlabel('Custom Score (normalized weight * max(time) / time * max(weight))')
+        ax.set_ylabel('Features (sorted by Custom Score)')
+        ax.set_title(f'{names[base_index]} Feature Trade-off: Importance vs ESP32 Computation Time')
     
-        ax.set_xlabel('Features (sorted by Custom Score)')
-        ax.set_ylabel('Custom Score (normalized weight/time)')
-        ax.set_title(f'{names[i]} Feature Trade-off: Importance vs Computation Time')
-    
-        # --- Legend (index: name, from 1 to 75) ---
-        legend_handles = [
-            mpatches.Patch(color=color_map[idx], label=f'{idx+1}: {feature_names[idx]}')
-            for idx in df_sorted['Feature_Index']
-        ]
-        plt.legend(
-            handles=legend_handles,
-            fontsize=6, loc='upper left', bbox_to_anchor=(1.02, 1),
-            ncol=2, frameon=False, title="Feature Index → Name"
-        )
-    
-        plot_name2 = ['Python_Feats_CustomScore.png', 'Matlab_Feats_CustomScore.png']
-        plot_path2 = os.path.join(plot(output_path_5), plot_name2[i])
+        plot_name2 = [f'Python_Feats_CustomScore_{sampleRate}.png', f'Matlab_Feats_CustomScore_{sampleRate}.png']
+        plot_path2 = os.path.join(plot(output_path_4), plot_name2[base_index])
         plt.tight_layout()
         plt.savefig(plot_path2, dpi=600)
         plt.show()
         plt.close()
         print(f'Saved plot: {plot_path2}')
         
-        # ---- Step 7: Select top 10 from X_train ----
-        X_top10 = X_train.iloc[:, top10]
-        X_top10.to_csv(out_file2, index=False, header=True)
-        print(f'Saved reduced X_train with top 10 features: {out_file2}, shape {X_top10.shape}')
- 
+        # ---- Step 7: Save ALL features reordered by custom score ----
+        custom_sorted_indices = df_sorted['Feature_Index'].to_numpy()
+
+        X_train_custom_sorted = X_train.iloc[:, custom_sorted_indices]
+        X_test_custom_sorted  = X_test.iloc[:, custom_sorted_indices]
+
+        out_file_all_train_custom = os.path.join(output_path_4, f'{names[base_index]}_X_train_custom_reordered_{sampleRate}.csv')
+        out_file_all_test_custom  = os.path.join(output_path_4, f'{names[base_index]}_X_test_custom_reordered_{sampleRate}.csv')
+
+        X_train_custom_sorted.to_csv(out_file_all_train_custom, index=False, header=True)
+        X_test_custom_sorted.to_csv(out_file_all_test_custom, index=False, header=True)
+
+        print(f'Saved reordered X_train (custom scores): {out_file_all_train_custom}, shape {X_train_custom_sorted.shape}')
+        print(f'Saved reordered X_test  (custom scores): {out_file_all_test_custom}, shape {X_test_custom_sorted.shape}')
+
     else:
         print('Warning: feats_computation_times.csv not found, skipping ESP32 plot.')
 
+
+# ---------------- Data Process 6: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
+def stage_6():
+    print('\n======= Data Process: 6 =======\n')
+    # ---------------- Import Libraries ------------------
+    import matplotlib.pyplot as plt
+    import polars as pl
+    from sklearn.model_selection import train_test_split, TimeSeriesSplit, cross_validate
+    from scipy.stats import mode, randint, uniform
+    import m2cgen as m2c
+    # ----------------------------------------------------
+    
+    def loadData(paths, index, input_file):
+        r'''
+        Load dataset X, y, feature names, and tag based on index from input_file.
+        
+        Parameters
+        ----------
+        paths : list
+            [stage4_path, stage6_path]
+        index : int
+            Row index of input_file
+        
+        Returns
+        -------
+        X : pd.DataFrame
+            Feature matrix (keeps column names)
+        y : pd.Series
+            Labels
+        fNames : list
+            Feature names
+        Data_tag : str
+            Tag describing the dataset
+        '''
+    
+        row = input_file.iloc[index]
+        X_file, y_file, Data_tag = row['X_file'], row['y_file'], row['Data_tag']
+    
+        # First 3 datasets are from Stage 4, rest from Stage 6
+        base_path = paths[0] if index < 2 else paths[1]
+    
+        X_path = os.path.join(base_path, X_file)
+        y_path = os.path.join(paths[0], y_file)
+    
+        # ---- Load X as DataFrame ----
+        X_data = pd.read_csv(X_path, dtype=np.float32)
+        fNames = X_data.columns.tolist()
+        X = X_data  # keep DataFrame instead of converting to numpy
+    
+        # ---- Load y as Series ----
+        y_data = pd.read_csv(y_path, header=None)
+    
+        # If first row is text (e.g., 'label'), drop it
+        if isinstance(y_data.iloc[0, 0], str):
+            y_data = y_data.iloc[1:]
+    
+        y = y_data.squeeze("columns").astype(np.int32)
+    
+        return X, y, fNames, Data_tag
+    
+    
+    
+    def classifiers(cl):
+        
+        if cl == 0: # Decision Tree 
+            from sklearn.tree import DecisionTreeClassifier  # Import Decision Tree Classifier
+            return DecisionTreeClassifier(), 'DecisionTree'
+            
+        elif cl == 1: # Random Forest 
+            from sklearn.ensemble import RandomForestClassifier
+            return RandomForestClassifier(), 'RandomForest'
+    
+    
+    
 # ============================= Auto Runner ===================================
 
 if auto == 0:
@@ -1050,13 +1000,20 @@ if auto == 0:
     elif data_process == 4: stage_4()
     elif data_process == 5: stage_5()
     elif data_process == 6: stage_6()
+
     
 elif auto == 1:
     stage_0()
     stage_1()
     stage_2()
     stage_3()
-    stage_4()
+    
     if matlab == 0:
-        stage_5()
+        stage_4()
+
+    else:
+        print('\nSkipping stage 5: ReliefF Feature Selection in Matlab mode. Run reliefF_feature_selection.m and press enter to continue\n')
+        input('PRESS ENTER TO CONTINUE.')
+        
+    stage_5()
     stage_6()

@@ -1,10 +1,30 @@
 clc; clear;
 
+% Ask user for sampling rate
+fprintf(['Choose the Sample Rate you used:\n' ...
+    '[1] 9.71 Hz\n' ...
+    '[2] 10 Hz\n' ...
+    '[3] 50 Hz\n']);
+
+choice = input('Enter the sample rate choice: ');
+
+% Map user choice to sampling rate strings
+switch choice
+    case 1
+        rateStr = '9.71';
+    case 2
+        rateStr = '10';
+    case 3
+        rateStr = '50';
+    otherwise
+        error('Invalid choice. Please select 1, 2, or 3.');
+end
+
 % Define the folder where the files are stored
-dataFolder = '4_FEATS_COMBINED';
+dataFolder = fullfile('4_FEATS_COMBINED', [rateStr '_Hz_sampling']);
 
 % Output folder
-outFolder = '5_FEATS_SELECTION';
+outFolder = fullfile('5_FEATS_SELECTION', [rateStr '_Hz_sampling']);
 
 % Create output folder if it doesn't exist
 if ~exist(outFolder, 'dir')
@@ -12,8 +32,8 @@ if ~exist(outFolder, 'dir')
 end
 
 % Build full paths to the CSV files
-Xfile = fullfile(dataFolder, 'X_train.csv');
-yfile = fullfile(dataFolder, 'y_train.csv');
+Xfile = fullfile(dataFolder, ['X_train_' rateStr '.csv']);
+yfile = fullfile(dataFolder, ['y_train_' rateStr '.csv']);
 
 % Import data
 X = single(round(readmatrix(Xfile, 'NumHeaderLines', 1), 3));
@@ -36,7 +56,8 @@ for i = 1:length(idx)
 end
 
 % Define output file
-resultsFile = fullfile(outFolder, 'Matlab_relieff_feature_indices_weights.csv');
+resultsFile = fullfile(outFolder, ...
+    ['Matlab_relieff_feature_indices_weights_' rateStr '.csv']);
 
 % Save with two columns (idx, weight)
 writematrix(results, resultsFile);
