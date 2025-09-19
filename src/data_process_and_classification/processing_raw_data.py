@@ -86,7 +86,7 @@ window_size = int(round(window * sampleRate))
 print(f'Window size set to {window_size} rows for sample rate {sampleRate} Hz and window time {window} sec.')
 # ------------------------------ Auto Runner Option ---------------------------
 # 0: run only one stage; 1: run all stages
-auto = 1
+auto = 0
 # ------------------------------ Data Process Option --------------------------
 # 0: raw -> clean;  
 # 1: clean -> features preprocessed; 
@@ -95,7 +95,7 @@ auto = 1
 # 4: X_data, y_data -> ReliefF selected features; 
 # 5: Plotting the weight order best features and combine the ESP32 computation time.
 
-data_process = 5
+data_process = 2
 # ----------------------------- Plotting Option -------------------------------
 pl = 1  # 0: no plots; 1: plots
 # ----------------------------- Matlab Option for ReleifF -------------------------------

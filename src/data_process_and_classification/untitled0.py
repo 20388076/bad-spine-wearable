@@ -273,7 +273,7 @@ for cl in range(2):
         }
         #XGBoost': {'n_estimators': randint(50, 300),'max_depth': randint(3, 10),'learning_rate': uniform(0.01, 1)}
     }
-    from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+    from sklearn.model_selection import  RandomizedSearchCV
     ts_cv = TimeSeriesSplit(n_splits=5) 
 
     search = RandomizedSearchCV(classifier, 
@@ -421,7 +421,7 @@ for cl in range(2):
                                                               X_test, 
                                                            y_test)
     
-    r'''
+
 # ========================================================================
     grid, results = feature_subset_gridsearch(
     best_model,
@@ -433,4 +433,3 @@ for cl in range(2):
     tol=0.01,
     relative=True
     )
-    '''

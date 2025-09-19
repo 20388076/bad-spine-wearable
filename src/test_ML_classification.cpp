@@ -127,8 +127,8 @@ float acc_x_data[WINDOW], acc_y_data[WINDOW], gyro_y_data[WINDOW], gyro_z_data[W
 int sample_index = 0;                            // current sample index in window
 const float G_CONST = 9.80665f;                  // Standard gravity
 float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
-float t;                                         // Measurements computation time variable
-unsigned long start;                             // Start time variable
+float t1, t2;                                    // Measurements computation time variable
+unsigned long start1, start2;                    // Start time variable
 // float fft_real_acc_x[WINDOW], fft_real_gyro_x[WINDOW]; // FFT real parts
 float theta_x, theta_y, theta_z; // tilt angles
 // FFT parameters
@@ -388,7 +388,6 @@ compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& 
 }
 
 // Task 1: Read MPU6050 data, compute features, and make predictions
-float t1, t2;
 
 void
 Task1code(void* pvParameters) {
@@ -396,10 +395,10 @@ Task1code(void* pvParameters) {
     int correct = 0;
     int total = MAX_RESULTS;
     while (iteration < MAX_RESULTS) {
-        start = millis();
         sample_index = 0;
 
         for (int i = 0; i < WINDOW; i++) {
+            start1 = millis();
             sensors_event_t a, g, temp;
             mpu.getEvent(&a, &g, &temp);
             acc_x_data[i] = a.acceleration.x / G_CONST; // Convert acceleration from m/s^2 to g
@@ -408,175 +407,188 @@ Task1code(void* pvParameters) {
             gyro_x_data[i] = g.gyro.x;
             gyro_y_data[i] = g.gyro.y;
             gyro_z_data[i] = g.gyro.z;
+
             sample_index = i;
-            vTaskDelay(pdMS_TO_TICKS(samplePeriod));
-        }
 
-        t1 = millis() - start;
-        Serial.printf("\nComputation time: %.2f ms\n", t1);
+            if (sample_index < WINDOW - 1) {
+                t1 = millis() - start1;
+                // Serial.printf("\nComputation time: %.2f ms\n", t1);
+                vTaskDelay(pdMS_TO_TICKS(samplePeriod - t1));
 
-        start = millis();
-        if (sample_index == WINDOW - 1) {
+            } else {
+                start2 = millis();
+                // float output_matrix[75]; // Initialize output matrix
 
-            // float output_matrix[75]; // Initialize output matrix
+                // --- f1 ---
+                float f1 = vector_magnitude(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+                // --- f2 ---
+                float f2 = vector_magnitude(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+                // --- f3 ---
+                float f3 = cubic_prod_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+                // --- f4 ---
+                float f4 = cubic_prod_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+                // --- f5 ---
+                float f5 = derivative_max(acc_x_data, WINDOW, sampleRate);
+                // --- f6 ---
+                float f6 = derivative_max(acc_y_data, WINDOW, sampleRate);
+                // --- f7 ---
+                float f7 = derivative_max(acc_z_data, WINDOW, sampleRate);
+                // --- f8 ---
+                float f8 = derivative_max(gyro_x_data, WINDOW, sampleRate);
+                // --- f9 ---
+                float f9 = derivative_max(gyro_y_data, WINDOW, sampleRate);
+                // --- f10 ---
+                float f10 = derivative_max(gyro_z_data, WINDOW, sampleRate);
+                // --- f11–f13 (thetas already computed) ---
+                compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, theta_x, theta_y, theta_z);
+                float f11 = theta_x;
+                float f12 = theta_y;
+                float f13 = theta_z;
+                // --- f14 ---
+                float f14 = window_mean(acc_x_data, WINDOW);
+                // --- f15 ---
+                float f15 = window_max(acc_x_data, WINDOW);
+                // --- f16 ---
+                float f16 = window_min(acc_x_data, WINDOW);
+                // --- f17 ---
+                float f17 = window_mean(acc_y_data, WINDOW);
+                // --- f18 ---
+                float f18 = window_max(acc_y_data, WINDOW);
+                // --- f19 ---
+                float f19 = window_min(acc_y_data, WINDOW);
+                // --- f20 ---
+                float f20 = window_mean(acc_z_data, WINDOW);
+                // --- f21 ---
+                float f21 = window_max(acc_z_data, WINDOW);
+                // --- f22 ---
+                float f22 = window_min(acc_z_data, WINDOW);
+                // --- f23 ---
+                float f23 = window_mean(gyro_x_data, WINDOW);
+                // --- f24 ---
+                float f24 = window_max(gyro_x_data, WINDOW);
+                // --- f25 ---
+                float f25 = window_min(gyro_x_data, WINDOW);
+                // --- f26 ---
+                float f26 = window_mean(gyro_y_data, WINDOW);
+                // --- f27 ---
+                float f27 = window_max(gyro_y_data, WINDOW);
+                // --- f28 ---
+                float f28 = window_min(gyro_y_data, WINDOW);
+                // --- f29 ---
+                float f29 = window_mean(gyro_z_data, WINDOW);
+                // --- f30 ---
+                float f30 = window_max(gyro_z_data, WINDOW);
+                // --- f31 ---
+                float f31 = window_min(gyro_z_data, WINDOW);
+                // --- f32 ---
+                float f32 = compute_sma_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+                // --- f33 ---
+                float f33 = compute_sma_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+                // --- f34 ---
+                float f34 = compute_rms(acc_x_data, WINDOW);
+                // --- f35 ---
+                float f35 = compute_rms(acc_y_data, WINDOW);
+                // --- f36 ---
+                float f36 = compute_rms(acc_z_data, WINDOW);
+                // --- f37 ---
+                float f37 = compute_rms(gyro_x_data, WINDOW);
+                // --- f38 ---
+                float f38 = compute_rms(gyro_y_data, WINDOW);
+                // --- f39 ---
+                float f39 = compute_rms(gyro_z_data, WINDOW);
+                // --- f40 ---
+                float f40 = compute_mad(acc_x_data, WINDOW);
+                // --- f41 ---
+                float f41 = compute_mad(acc_y_data, WINDOW);
+                // --- f42 ---
+                float f42 = compute_mad(acc_z_data, WINDOW);
+                // --- f43 ---
+                float f43 = compute_mad(gyro_x_data, WINDOW);
+                // --- f44 ---
+                float f44 = compute_mad(gyro_y_data, WINDOW);
+                // --- f45 ---
+                float f45 = compute_mad(gyro_z_data, WINDOW);
+                // --- f46 ---
+                float f46 = compute_var(acc_x_data, WINDOW);
+                // --- f47 ---
+                float f47 = compute_var(acc_y_data, WINDOW);
+                // --- f48 ---
+                float f48 = compute_var(acc_z_data, WINDOW);
+                // --- f49 ---
+                float f49 = compute_var(gyro_x_data, WINDOW);
+                // --- f50 ---
+                float f50 = compute_var(gyro_y_data, WINDOW);
+                // --- f51 ---
+                float f51 = compute_var(gyro_z_data, WINDOW);
+                float f52 = compute_std(acc_x_data, WINDOW);
+                float f53 = compute_std(acc_y_data, WINDOW);
+                float f54 = compute_std(acc_z_data, WINDOW);
+                float f55 = compute_std(gyro_x_data, WINDOW);
+                float f56 = compute_std(gyro_y_data, WINDOW);
+                float f57 = compute_std(gyro_z_data, WINDOW);
+                float f58 = compute_iqr(acc_x_data, WINDOW);
+                float f59 = compute_iqr(acc_y_data, WINDOW);
+                float f60 = compute_iqr(acc_z_data, WINDOW);
+                float f61 = compute_iqr(gyro_x_data, WINDOW);
+                float f62 = compute_iqr(gyro_y_data, WINDOW);
+                float f63 = compute_iqr(gyro_z_data, WINDOW);
+                // --- f64 ---
+                compute_FFT_real(acc_x_data, fft_real_acc_x, WINDOW);
+                float f64 = fft_real_acc_x[1]; // first non-DC bin
+                // --- f65 ---
+                compute_FFT_real(acc_y_data, fft_real_acc_y, WINDOW);
+                float f65 = fft_real_acc_y[1];
+                // --- f66 ---
+                compute_FFT_real(acc_z_data, fft_real_acc_z, WINDOW);
+                float f66 = fft_real_acc_z[1];
+                // --- f67 ---
+                compute_FFT_real(gyro_x_data, fft_real_gyro_x, WINDOW);
+                float f67 = fft_real_gyro_x[1];
+                // --- f68 ---
+                compute_FFT_real(gyro_y_data, fft_real_gyro_y, WINDOW);
+                float f68 = fft_real_gyro_y[1];
+                // --- f69 ---
+                compute_FFT_real(gyro_z_data, fft_real_gyro_z, WINDOW);
+                float f69 = fft_real_gyro_z[1];
+                // --- f70 ---
+                compute_FFT_mag(acc_x_data, fft_mag_acc_x, WINDOW);
+                float f70 = compute_fft_energy(fft_mag_acc_x, WINDOW);
+                // --- f71 ---
+                compute_FFT_mag(acc_y_data, fft_mag_acc_y, WINDOW);
+                float f71 = compute_fft_energy(fft_mag_acc_y, WINDOW);
+                // --- f72 ---
+                compute_FFT_mag(acc_z_data, fft_mag_acc_z, WINDOW);
+                float f72 = compute_fft_energy(fft_mag_acc_z, WINDOW);
+                // --- f73 ---
+                compute_FFT_mag(gyro_x_data, fft_mag_gyro_x, WINDOW);
+                float f73 = compute_fft_energy(fft_mag_gyro_x, WINDOW);
+                // --- f74 ---
+                compute_FFT_mag(gyro_y_data, fft_mag_gyro_y, WINDOW);
+                float f74 = compute_fft_energy(fft_mag_gyro_y, WINDOW);
+                // --- f75 ---
+                compute_FFT_mag(gyro_z_data, fft_mag_gyro_z, WINDOW);
+                float f75 = compute_fft_energy(fft_mag_gyro_z, WINDOW);
 
-            // --- f1 ---
-            float f1 = vector_magnitude(acc_x_data, acc_y_data, acc_z_data, WINDOW);
-            // --- f2 ---
-            float f2 = vector_magnitude(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
-            // --- f3 ---
-            float f3 = cubic_prod_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
-            // --- f4 ---
-            float f4 = cubic_prod_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
-            // --- f5 ---
-            float f5 = derivative_max(acc_x_data, WINDOW, sampleRate);
-            // --- f6 ---
-            float f6 = derivative_max(acc_y_data, WINDOW, sampleRate);
-            // --- f7 ---
-            float f7 = derivative_max(acc_z_data, WINDOW, sampleRate);
-            // --- f8 ---
-            float f8 = derivative_max(gyro_x_data, WINDOW, sampleRate);
-            // --- f9 ---
-            float f9 = derivative_max(gyro_y_data, WINDOW, sampleRate);
-            // --- f10 ---
-            float f10 = derivative_max(gyro_z_data, WINDOW, sampleRate);
-            // --- f11–f13 (thetas already computed) ---
-            compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, theta_x, theta_y, theta_z);
-            float f11 = theta_x;
-            float f12 = theta_y;
-            float f13 = theta_z;
-            // --- f14 ---
-            float f14 = window_mean(acc_x_data, WINDOW);
-            // --- f15 ---
-            float f15 = window_max(acc_x_data, WINDOW);
-            // --- f16 ---
-            float f16 = window_min(acc_x_data, WINDOW);
-            // --- f17 ---
-            float f17 = window_mean(acc_y_data, WINDOW);
-            // --- f18 ---
-            float f18 = window_max(acc_y_data, WINDOW);
-            // --- f19 ---
-            float f19 = window_min(acc_y_data, WINDOW);
-            // --- f20 ---
-            float f20 = window_mean(acc_z_data, WINDOW);
-            // --- f21 ---
-            float f21 = window_max(acc_z_data, WINDOW);
-            // --- f22 ---
-            float f22 = window_min(acc_z_data, WINDOW);
-            // --- f23 ---
-            float f23 = window_mean(gyro_x_data, WINDOW);
-            // --- f24 ---
-            float f24 = window_max(gyro_x_data, WINDOW);
-            // --- f25 ---
-            float f25 = window_min(gyro_x_data, WINDOW);
-            // --- f26 ---
-            float f26 = window_mean(gyro_y_data, WINDOW);
-            // --- f27 ---
-            float f27 = window_max(gyro_y_data, WINDOW);
-            // --- f28 ---
-            float f28 = window_min(gyro_y_data, WINDOW);
-            // --- f29 ---
-            float f29 = window_mean(gyro_z_data, WINDOW);
-            // --- f30 ---
-            float f30 = window_max(gyro_z_data, WINDOW);
-            // --- f31 ---
-            float f31 = window_min(gyro_z_data, WINDOW);
-            // --- f32 ---
-            float f32 = compute_sma_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
-            // --- f33 ---
-            float f33 = compute_sma_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
-            // --- f34 ---
-            float f34 = compute_rms(acc_x_data, WINDOW);
-            // --- f35 ---
-            float f35 = compute_rms(acc_y_data, WINDOW);
-            // --- f36 ---
-            float f36 = compute_rms(acc_z_data, WINDOW);
-            // --- f37 ---
-            float f37 = compute_rms(gyro_x_data, WINDOW);
-            // --- f38 ---
-            float f38 = compute_rms(gyro_y_data, WINDOW);
-            // --- f39 ---
-            float f39 = compute_rms(gyro_z_data, WINDOW);
-            // --- f40 ---
-            float f40 = compute_mad(acc_x_data, WINDOW);
-            // --- f41 ---
-            float f41 = compute_mad(acc_y_data, WINDOW);
-            // --- f42 ---
-            float f42 = compute_mad(acc_z_data, WINDOW);
-            // --- f43 ---
-            float f43 = compute_mad(gyro_x_data, WINDOW);
-            // --- f44 ---
-            float f44 = compute_mad(gyro_y_data, WINDOW);
-            // --- f45 ---
-            float f45 = compute_mad(gyro_z_data, WINDOW);
-            // --- f46 ---
-            float f46 = compute_var(acc_x_data, WINDOW);
-            // --- f47 ---
-            float f47 = compute_var(acc_y_data, WINDOW);
-            // --- f48 ---
-            float f48 = compute_var(acc_z_data, WINDOW);
-            // --- f49 ---
-            float f49 = compute_var(gyro_x_data, WINDOW);
-            // --- f50 ---
-            float f50 = compute_var(gyro_y_data, WINDOW);
-            // --- f51 ---
-            float f51 = compute_var(gyro_z_data, WINDOW);
-            float f52 = compute_std(acc_x_data, WINDOW);
-            float f53 = compute_std(acc_y_data, WINDOW);
-            float f54 = compute_std(acc_z_data, WINDOW);
-            float f55 = compute_std(gyro_x_data, WINDOW);
-            float f56 = compute_std(gyro_y_data, WINDOW);
-            float f57 = compute_std(gyro_z_data, WINDOW);
-            float f58 = compute_iqr(acc_x_data, WINDOW);
-            float f59 = compute_iqr(acc_y_data, WINDOW);
-            float f60 = compute_iqr(acc_z_data, WINDOW);
-            float f61 = compute_iqr(gyro_x_data, WINDOW);
-            float f62 = compute_iqr(gyro_y_data, WINDOW);
-            float f63 = compute_iqr(gyro_z_data, WINDOW);
-            compute_FFT_real(acc_x_data, fft_real_acc_x, WINDOW);
-            float f64 = fft_real_acc_x[1]; // first non-DC bin
-            compute_FFT_real(acc_y_data, fft_real_acc_y, WINDOW);
-            float f65 = fft_real_acc_y[1];
-            compute_FFT_real(acc_z_data, fft_real_acc_z, WINDOW);
-            float f66 = fft_real_acc_z[1]; //  float f66 = fft_real_acc_z[8]; // first non-DC bin
-            compute_FFT_real(gyro_x_data, fft_real_gyro_x, WINDOW);
-            float f67 = fft_real_gyro_x[1];
-            compute_FFT_real(gyro_y_data, fft_real_gyro_y, WINDOW);
-            float f68 = fft_real_gyro_y[1];
-            compute_FFT_real(gyro_z_data, fft_real_gyro_z, WINDOW);
-            float f69 = fft_real_gyro_z[1];
-            compute_FFT_mag(acc_x_data, fft_mag_acc_x, WINDOW);
-            float f70 = compute_fft_energy(fft_mag_acc_x, WINDOW);
-            compute_FFT_mag(acc_y_data, fft_mag_acc_y, WINDOW);
-            float f71 = compute_fft_energy(fft_mag_acc_y, WINDOW);
-            compute_FFT_mag(acc_z_data, fft_mag_acc_z, WINDOW);
-            float f72 = compute_fft_energy(fft_mag_acc_z, WINDOW);
-            compute_FFT_mag(gyro_x_data, fft_mag_gyro_x, WINDOW);
-            float f73 = compute_fft_energy(fft_mag_gyro_x, WINDOW);
-            compute_FFT_mag(gyro_y_data, fft_mag_gyro_y, WINDOW);
-            float f74 = compute_fft_energy(fft_mag_gyro_y, WINDOW);
-            compute_FFT_mag(gyro_z_data, fft_mag_gyro_z, WINDOW);
-            float f75 = compute_fft_energy(fft_mag_gyro_z, WINDOW);
+                float values[] = {f1,  f2,  f3,  f4,  f5,  f6,  f7,  f8,  f9,  f10, f11, f12, f13, f14, f15,
+                                  f16, f17, f18, f19, f20, f21, f22, f23, f24, f25, f26, f27, f28, f29, f30,
+                                  f31, f32, f33, f34, f35, f36, f37, f38, f39, f40, f41, f42, f43, f44, f45,
+                                  f46, f47, f48, f49, f50, f51, f52, f53, f54, f55, f56, f57, f58, f59, f60,
+                                  f61, f62, f63, f64, f65, f66, f67, f68, f69, f70, f71, f72, f73, f74, f75};
 
-            float values[] = {f1,  f2,  f3,  f4,  f5,  f6,  f7,  f8,  f9,  f10, f11, f12, f13, f14, f15,
-                              f16, f17, f18, f19, f20, f21, f22, f23, f24, f25, f26, f27, f28, f29, f30,
-                              f31, f32, f33, f34, f35, f36, f37, f38, f39, f40, f41, f42, f43, f44, f45,
-                              f46, f47, f48, f49, f50, f51, f52, f53, f54, f55, f56, f57, f58, f59, f60,
-                              f61, f62, f63, f64, f65, f66, f67, f68, f69, f70, f71, f72, f73, f74, f75};
+                int predicted = model.predict(values);
 
-            int predicted = model.predict(values);
+                Serial.printf("\nIteration %ld/%ld - Prediction result: %d\n", iteration, MAX_RESULTS, predicted);
+                int actual = (int)y_test[iteration];
 
-            Serial.printf("\nIteration %ld/%ld - Prediction result: %d\n", iteration, MAX_RESULTS, predicted);
-            int actual = (int)y_test[iteration];
-
-            if (predicted == actual) {
-                correct++;
+                if (predicted == actual) {
+                    correct++;
+                }
+                t2 = millis() - start2;
+                // Serial.printf("\nComputation time: %.2f ms\n", t2);
+                iteration++;
+                vTaskDelay(pdMS_TO_TICKS(samplePeriod - t2));
             }
         }
-        t = millis() - start;
-        Serial.printf("\nComputation time: %.2f ms\n", t);
-        iteration++;
-        //vTaskDelay(pdMS_TO_TICKS(samplePeriod - t)); // Sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
     }
     float accuracy = (float)correct / total * 100.0;
     Serial.print("Total Accuracy: ");
@@ -607,7 +619,8 @@ Task2code(void* pvParameters) {
             }
         }
 
-        else if (scenario == 3 || 4 || 5) { // Moning gradually from 85° to 45° with servo steps per minute
+        else if (scenario == 3 || scenario == 4
+                 || scenario == 5) { // Moving gradually from 85° to 45° with servo steps per minute
             if (scenario == 4) {
                 step = 2; // Decrease position by 2 servo steps per minute
             } else if (scenario == 5) {
