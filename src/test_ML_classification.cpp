@@ -415,7 +415,7 @@ Task1code(void* pvParameters) {
                 // Serial.printf("\nComputation time: %.2f ms\n", t1);
                 vTaskDelay(pdMS_TO_TICKS(samplePeriod - t1));
 
-            } else {
+            } else if (sample_index == WINDOW - 1) {
                 start2 = millis();
                 // float output_matrix[75]; // Initialize output matrix
 
