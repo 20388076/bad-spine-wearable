@@ -95,7 +95,7 @@ auto = 0
 # 4: X_data, y_data -> ReliefF selected features; 
 # 5: Plotting the weight order best features and combine the ESP32 computation time.
 
-data_process = 2
+data_process = 3
 # ----------------------------- Plotting Option -------------------------------
 pl = 1  # 0: no plots; 1: plots
 # ----------------------------- Matlab Option for ReleifF -------------------------------
@@ -542,7 +542,7 @@ def stage_2():
                 
             # If there is an incomplete tail (n_rows % window != 0), we leave those rows unchanged
             df[col] = new_col # Replace df column with new values
-
+            
         # ---- Save aggregated dataset ----
         out_file = os.path.join(output_path_2, output_file_2[file_idx])
         df.to_csv(out_file, index=False)
@@ -566,42 +566,42 @@ def stage_3():
         elif isinstance(y, pd.DataFrame):
             # flatten single-column DataFrame to Series
             y = y.iloc[:, 0]
-
+            
         X_train_parts, X_test_parts = [], []
         y_train_parts, y_test_parts = [], []
-
+        
         for class_label in y.unique():
             class_mask = (y == class_label)
             class_data = X.loc[class_mask]
             class_labels = y.loc[class_mask]
-
+            
             n_total = len(class_data)
             n_train = int(n_total * train_size)
-
+            
             # Deterministic split (no shuffle)
             X_train_class = class_data.iloc[:n_train]
             X_test_class  = class_data.iloc[n_train:]
             y_train_class = class_labels.iloc[:n_train]
             y_test_class  = class_labels.iloc[n_train:]
-
+            
             # Collect
             X_train_parts.append(X_train_class)
             X_test_parts.append(X_test_class)
             y_train_parts.append(y_train_class)
             y_test_parts.append(y_test_class)
-
+            
         # Concatenate back
         X_train = pd.concat(X_train_parts, axis=0, ignore_index=True)
         X_test  = pd.concat(X_test_parts, axis=0, ignore_index=True)
         y_train = pd.concat(y_train_parts, axis=0, ignore_index=True)
         y_test  = pd.concat(y_test_parts, axis=0, ignore_index=True)
-
+        
         # Safeguard: total lengths must match input
         assert len(X_train) + len(X_test) == len(X), \
             f'Split mismatch: {len(X)} rows in, {len(X_train)+len(X_test)} out'
         assert len(y_train) + len(y_test) == len(y), \
             f'Label mismatch: {len(y)} rows in, {len(y_train)+len(y_test)} out'
-
+            
         return X_train, X_test, y_train, y_test
     # ----------------------------------------------------
     
@@ -639,11 +639,11 @@ def stage_3():
         
         # Window-based aggregation
         df['window_id'] = df.index // window_size
-    
+        
         # Columns for derivative features
         derivative_cols = ['jerk_x', 'jerk_y', 'jerk_z','accl_x','accl_y','accl_z']
         agg_dict = {}
-    
+        
         for col in df.columns:
             if col == 'window_id':
                 continue
@@ -651,13 +651,13 @@ def stage_3():
                 agg_dict[col] = 'max'   # use max
             else:
                 agg_dict[col] = 'median'  # use median
-    
+                
         # Aggregate per window
         df_windowed = df.groupby('window_id').agg(agg_dict).reset_index(drop=True).round(3)
-    
+        
         all_X.append(df_windowed)
         all_y.append(np.full(len(df_windowed), file_idx))  # dataset number as label
-    
+        
     # Concatenate into big DataFrames
     X_data = pd.concat(all_X, axis=0, ignore_index=True)
     y_data = pd.Series(np.concatenate(all_y), name='label')
@@ -667,10 +667,10 @@ def stage_3():
     
     raw_y = np.concatenate(raw_labels)
     norm_y = np.concatenate(norm_labels)
-
+    
     raw_y = pd.Series(np.concatenate(raw_labels), name='label')
     norm_y = pd.Series(np.concatenate(norm_labels), name='label')
-
+    
     # Train - Test split before feature selection for models accuracy evaluation
     train_size=0.75
     test_size=0.25
@@ -678,7 +678,7 @@ def stage_3():
     
     raw_train, raw_test, y_raw_train, y_raw_test = TrainTestSplit(all_raw_data, raw_y, train_size, test_size)
     norm_train, norm_test, y_norm_train, y_norm_test = TrainTestSplit(all_norm_data, norm_y, train_size, test_size)
-
+    
     # ---- Save datasets (headers, NO index) ----
     save_items = {
         # aggregated features
@@ -688,7 +688,7 @@ def stage_3():
         f'y_train_{sampleRate}.csv': pd.DataFrame(y_train, columns=['label']),
         f'X_test_{sampleRate}.csv': pd.DataFrame(X_test, columns=X_data.columns, dtype=np.float32),
         f'y_test_{sampleRate}.csv': pd.DataFrame(y_test, columns=['label']),
-    
+        
         # raw version
         f'all_raw_data_{sampleRate}.csv': all_raw_data,
         f'y_all_raw_data_{sampleRate}.csv': pd.DataFrame(raw_y, columns=['label']),
@@ -696,7 +696,7 @@ def stage_3():
         f'y_all_raw_train_{sampleRate}.csv': pd.DataFrame(y_raw_train, columns=['label']),
         f'all_raw_test_{sampleRate}.csv': pd.DataFrame(raw_test, columns=all_raw_data.columns, dtype=np.float32),
         f'y_all_raw_test_{sampleRate}.csv': pd.DataFrame(y_raw_test, columns=['label']),
-    
+        
         # norm version
         f'all_norm_data_{sampleRate}.csv': all_norm_data,
         f'y_all_norm_data_{sampleRate}.csv': pd.DataFrame(norm_y, columns=['label']),
@@ -705,24 +705,23 @@ def stage_3():
         f'all_norm_test_{sampleRate}.csv': pd.DataFrame(norm_test, columns=all_norm_data.columns, dtype=np.float32),
         f'y_all_norm_test_{sampleRate}.csv': pd.DataFrame(y_norm_test, columns=['label']),
     }
-
+    
     for fname, df in save_items.items():
         path = os.path.join(output_path_3, fname)
-
+        
         df.to_csv(path, index=False, header=True)
         print(f'Saved {fname} with shape {df.shape}')
         
-
 # ---------------- Data Process 4: ReliefF Feature Selection ----------------
 def stage_4():
     print('\n======= Data Process: 4 =======\n') 
     # ---------------- Import Libraries ------------------     
     from skrebate import ReliefF
-    # ----------------------------------------------------
-
+    # ---------------------------------------------------- 
+    
     # Paths for X and y (from Stage 4 outputs)
     X_path = os.path.join(input_path_4, input_file_4[0])
-    y_path = os.path.join(input_path_4, input_file_4[1])
+    y_path = os.path.join(input_path_4, input_file_4[1]) 
     
     # Load without headers
     X_data = pd.read_csv(X_path,header=None, skiprows=1)
@@ -759,10 +758,10 @@ def stage_4():
 # ---------------- Data Process 5: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
 def stage_5():
     print('\n======= Data Process: 5 =======\n')
-    
+    # ---------------- Import Libraries ------------------
     import matplotlib.pyplot as plt
-
-
+    # ----------------------------------------------------
+    
     # ---- Step 0: Set file paths and index mode ----
     if matlab == 0:
         weights_file = os.path.join(output_path_4, f'Python_relieff_feature_indices_weights_{sampleRate}.csv')     
@@ -770,39 +769,39 @@ def stage_5():
     else:
         weights_file = os.path.join(output_path_4, f'Matlab_relieff_feature_indices_weights_{sampleRate}.csv')
         base_index = 1  # MATLAB output is 1-based, will subtract later
-    
+        
     names = ['Python', 'Matlab']
     # ---- Step 1: Load weights ----
     weights_df = pd.read_csv(weights_file)
     print(f'Loaded ReliefF weights with shape {weights_df.shape}')
-
+    
     # Normalize indices to 0-based
     weights_df['Feature_Index'] = weights_df['Feature_Index'] - base_index
-
+    
     # ---- Step 2: Load features ----
     X_train = pd.read_csv(os.path.join(output_path_3, f'X_train_{sampleRate}.csv'))
     X_test  = pd.read_csv(os.path.join(output_path_3, f'X_test_{sampleRate}.csv'))
     feature_names = X_train.columns.to_list()
-
+    
     # ---- Step 3: Order features by ReliefF weight ----
     weights_sorted = weights_df.sort_values('ReliefF_Weight', ascending=False).reset_index(drop=True)
     sorted_indices = weights_sorted['Feature_Index'].to_numpy()
-
+    
     # Reorder train/test
     X_train_sorted = X_train.iloc[:, sorted_indices]
     X_test_sorted  = X_test.iloc[:, sorted_indices]
-
+    
     # Save reordered datasets
     X_train_sorted.to_csv(os.path.join(output_path_4, f'{names[base_index]}_X_train_weight_ordered_{sampleRate}.csv'), index=False, header=True)
     X_test_sorted.to_csv(os.path.join(output_path_4, f'{names[base_index]}_X_test_weight_ordered_{sampleRate}.csv'), index=False, header=True)
-
+    
     # ---- Step 4: Top-10 features ----
     top10_indices = sorted_indices[:10]
-
+    
     # ---- Step 5: Plot ReliefF weights ----
     weights_plot = weights_df.copy().sort_values('ReliefF_Weight', ascending=False).reset_index(drop=True)
     weights_plot['Feature_Name'] = [feature_names[i] for i in weights_plot['Feature_Index']]
-
+    
     cmap = plt.cm.get_cmap('tab20', len(feature_names))
     fig, ax = plt.subplots(figsize=(10, 10))
     bars = ax.barh(
@@ -811,13 +810,13 @@ def stage_5():
         color=[cmap(idx) for idx in weights_plot['Feature_Index']],
         edgecolor='black'
     )
-
+    
     # Highlight top-10
     for ix, feat_idx in enumerate(weights_plot['Feature_Index']):
         if feat_idx in top10_indices:
             bars[ix].set_edgecolor('cyan')
             bars[ix].set_linewidth(2)
-
+            
     ax.set_yticks(np.arange(len(weights_plot)))
     ax.set_yticklabels(weights_plot['Feature_Name'], fontsize=9)
     ax.invert_yaxis()
@@ -827,20 +826,19 @@ def stage_5():
     plt.tight_layout()
     plt.savefig(os.path.join(plot(output_path_4), f'{names[base_index]}_relieff_weights_plot_{sampleRate}.png'), dpi=600)
     plt.show()
-
+    
     # ---- Step 6: ESP32 Feature Computation Time vs ReliefF Weights ----
     times_file = os.path.join(input_path_0, f'feats_computation_times_{sampleRate}.csv')
     if os.path.isfile(times_file):
         times = pd.read_csv(times_file, header=None).iloc[0].to_numpy()
         times = np.log1p(times)   # safer than log
         if len(times) != len(feature_names):
-            raise ValueError(f'Mismatch: {len(times)} times vs {len(feature_names)} features')
-    
+            raise ValueError(f'Mismatch: {len(times)} times vs {len(feature_names)} features')    
         # --- Load weights ---
         #weights_df = pd.read_csv(weights_file)
         weights_df['Feature_Index'] = weights_df['Feature_Index'] - base_index  # 0-based
         #feature_names = X_train.columns.to_list()
-    
+        
         # Merge into DataFrame
         df = pd.DataFrame({
             'Feature_Index': np.arange(len(times)),
@@ -851,18 +849,18 @@ def stage_5():
             on='Feature_Index',
             how='left'
         )
-    
+            
         # Define custom score: higher = better
         df['Max_Weight'] = df['ReliefF_Weight'].max()
         df['Max_Time']   = df['Time_ms'].max()
         df['Score'] = (df['ReliefF_Weight'] * df['Max_Time']) / (df['Time_ms'] * df['Max_Weight'])
-    
+        
         # Sort by score
         df_sorted = df.sort_values('Score', ascending=False).reset_index(drop=True)
-    
+        
         # Top-10 by score (shift - i so indices display 0–74)
         top10 = (df_sorted['Feature_Index'].head(10) - base_index).tolist()
-    
+        
         # --- Plot ---
         fig, ax = plt.subplots(figsize=(10, 10))
         bars = ax.barh(
@@ -889,7 +887,7 @@ def stage_5():
         ax.set_xlabel('Custom Score (normalized weight * max(time) / time * max(weight))')
         ax.set_ylabel('Features (sorted by Custom Score)')
         ax.set_title(f'{names[base_index]} Feature Trade-off: Importance vs ESP32 Computation Time')
-    
+        
         plot_name2 = [f'Python_Feats_CustomScore_{sampleRate}.png', f'Matlab_Feats_CustomScore_{sampleRate}.png']
         plot_path2 = os.path.join(plot(output_path_4), plot_name2[base_index])
         plt.tight_layout()
@@ -900,22 +898,21 @@ def stage_5():
         
         # ---- Step 7: Save ALL features reordered by custom score ----
         custom_sorted_indices = df_sorted['Feature_Index'].to_numpy()
-
+        
         X_train_custom_sorted = X_train.iloc[:, custom_sorted_indices]
         X_test_custom_sorted  = X_test.iloc[:, custom_sorted_indices]
-
+        
         out_file_all_train_custom = os.path.join(output_path_4, f'{names[base_index]}_X_train_custom_reordered_{sampleRate}.csv')
         out_file_all_test_custom  = os.path.join(output_path_4, f'{names[base_index]}_X_test_custom_reordered_{sampleRate}.csv')
-
+        
         X_train_custom_sorted.to_csv(out_file_all_train_custom, index=False, header=True)
         X_test_custom_sorted.to_csv(out_file_all_test_custom, index=False, header=True)
-
+        
         print(f'Saved reordered X_train (custom scores): {out_file_all_train_custom}, shape {X_train_custom_sorted.shape}')
         print(f'Saved reordered X_test  (custom scores): {out_file_all_test_custom}, shape {X_test_custom_sorted.shape}')
-
+        
     else:
         print('Warning: feats_computation_times.csv not found, skipping ESP32 plot.')
-
 
 # ---------------- Data Process 6: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
 def stage_6():
@@ -987,8 +984,6 @@ def stage_6():
         elif cl == 1: # Random Forest 
             from sklearn.ensemble import RandomForestClassifier
             return RandomForestClassifier(), 'RandomForest'
-    
-    
     
 # ============================= Auto Runner ===================================
 

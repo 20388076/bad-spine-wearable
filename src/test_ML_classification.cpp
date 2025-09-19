@@ -51,8 +51,8 @@ Eloquent::ML::Port::DecisionTree model;
 // 5: Gradual movement detection 3 steps per minute with random movement / anomaly detection (for x - > choice_num = 12, y - > choice_num = 13, z - > choice_num = 14)
 // Choice number for test data (0-14 for different test scenarios)
 int choice_num = 0; // Will be set based on scenario and axis
-int scenario = 1;   // scenario of expirament 1-5
-char axis = 'z';    // Can be 'x', 'y', or 'z'
+int scenario = 5;   // scenario of expirament 1-5
+char axis = 'x';    // Can be 'x', 'y', or 'z'
 
 // Function to set choice_num based on scenario and axis
 void
@@ -128,7 +128,7 @@ int sample_index = 0;                            // current sample index in wind
 const float G_CONST = 9.80665f;                  // Standard gravity
 float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
 float t1, t2;                                    // Measurements computation time variable
-unsigned long start1, start2;                    // Start time variable
+unsigned long start;                             // Start time variable
 // float fft_real_acc_x[WINDOW], fft_real_gyro_x[WINDOW]; // FFT real parts
 float theta_x, theta_y, theta_z; // tilt angles
 // FFT parameters
@@ -398,7 +398,7 @@ Task1code(void* pvParameters) {
         sample_index = 0;
 
         for (int i = 0; i < WINDOW; i++) {
-            start1 = millis();
+            start = millis();
             sensors_event_t a, g, temp;
             mpu.getEvent(&a, &g, &temp);
             acc_x_data[i] = a.acceleration.x / G_CONST; // Convert acceleration from m/s^2 to g
@@ -411,12 +411,11 @@ Task1code(void* pvParameters) {
             sample_index = i;
 
             if (sample_index < WINDOW - 1) {
-                t1 = millis() - start1;
+                t1 = millis() - start;
                 // Serial.printf("\nComputation time: %.2f ms\n", t1);
                 vTaskDelay(pdMS_TO_TICKS(samplePeriod - t1));
 
             } else if (sample_index == WINDOW - 1) {
-                start2 = millis();
                 // float output_matrix[75]; // Initialize output matrix
 
                 // --- f1 ---
@@ -583,7 +582,7 @@ Task1code(void* pvParameters) {
                 if (predicted == actual) {
                     correct++;
                 }
-                t2 = millis() - start2;
+                t2 = millis() - start;
                 // Serial.printf("\nComputation time: %.2f ms\n", t2);
                 iteration++;
                 vTaskDelay(pdMS_TO_TICKS(samplePeriod - t2));
