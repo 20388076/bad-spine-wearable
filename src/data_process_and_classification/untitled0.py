@@ -251,10 +251,10 @@ index = 2
 for cl in range(2):
     
     X_train, y_train, fNames, Data_tag = loadData(paths, index, input_file_train)
-    # X_train = X_train.iloc[:, :10].copy()
+    X_train = X_train.iloc[:, :10].copy()
     # fNames = pd.DataFrame(row[:10] for row in fNames)
     X_test, y_test, fNs, Data_tag = loadData(paths, index, input_file_test)
-    # X_test = X_test.iloc[:, :10].copy()
+    X_test = X_test.iloc[:, :10].copy()
     
     classifier, classifier_name = classifiers(cl)
     
@@ -278,7 +278,7 @@ for cl in range(2):
 
     search = RandomizedSearchCV(classifier, 
                                 param_dists[classifier_name], 
-                                n_iter=1000, 
+                                n_iter=100, 
                                 cv=ts_cv, 
                                 n_jobs=-1, 
                                 scoring='accuracy', 
@@ -376,10 +376,10 @@ for cl in range(2):
                 labels=labels,                                      
                 display_labels=[f'Class {i}' for i in labels],       
                 normalize='true',
-                cmap=plt.cm.Blues,                                    # row-wise %
+                cmap=plt.cm.Blues,
                 xticks_rotation=90,
                 values_format='.1%',  
-                ax=ax            # show as percents
+                ax=ax            
                 )
             
             # Remove scientific notation    
@@ -407,12 +407,12 @@ for cl in range(2):
             for text in disp.ax_.texts:
                 text.set_fontsize(6)  # Increase for better visibility (try 10–12 if need 
             # Save and show
-            plt.savefig('temp_image.png', dpi=600, bbox_inches='tight')
+            plt.savefig(f'{classifier_name}_image.png', dpi=600, bbox_inches='tight')
             plt.tight_layout()
             plt.show()
             plt.close()
     
-        return buf.getvalue(), 'temp_image.png'
+        return buf.getvalue(), '{classifier_name}_image.png'
     
     classification_text, image_path = capture_output_and_plot(classifier_name,
                                                               test_score, 

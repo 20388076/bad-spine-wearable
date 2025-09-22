@@ -52,7 +52,7 @@ Eloquent::ML::Port::DecisionTree model;
 // Choice number for test data (0-14 for different test scenarios)
 int choice_num = 0; // Will be set based on scenario and axis
 int scenario = 5;   // scenario of expirament 1-5
-char axis = 'x';    // Can be 'x', 'y', or 'z'
+char axis = 'y';    // Can be 'x', 'y', or 'z'
 
 // Function to set choice_num based on scenario and axis
 void
@@ -590,7 +590,7 @@ Task1code(void* pvParameters) {
         }
     }
     float accuracy = (float)correct / total * 100.0;
-    Serial.print("Total Accuracy: ");
+    Serial.print("\nTotal Accuracy: ");
     Serial.print(accuracy);
     Serial.println("%");
 }

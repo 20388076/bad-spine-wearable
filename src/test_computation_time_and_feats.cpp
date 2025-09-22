@@ -1,5 +1,6 @@
 #include <Arduino.h>
-#include <math.h>
+#include <cmath>   // sqrt, acos
+#include <algorithm> // std::max, std::min
 #include "fft.h" // your custom FFT implementation
 
 // ===========================================
@@ -268,26 +269,36 @@ derivative_max(float* data, int n, float dt) {
     return maxv;
 }
 
-// ---- Gravity vector + tilt angles (theta) ----
+// ---- Thetas (median) ----
 void
-compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& theta_x, float& theta_y,
-                           float& theta_z) {
-    float g_x, g_y, g_z, g_mag;
-    // ---- Step 1: Mean per axis (already in g-units)
-    g_x = window_mean(ax_g, n);
-    g_y = window_mean(ay_g, n);
-    g_z = window_mean(az_g, n);
+compute_thetas(float* ax, float* ay, float* az, int n, float& theta_x, float& theta_y, float& theta_z) {
+    float th_x_arr[n], th_y_arr[n], th_z_arr[n];
 
-    // ---- Step 2: Gravity magnitude
-    g_mag = sqrt(g_x * g_x + g_y * g_y + g_z * g_z);
+    for (int i = 0; i < n; i++) {
+        float g_mag = std::sqrt(ax[i] * ax[i] + ay[i] * ay[i] + az[i] * az[i]);
+        if (g_mag == 0) {
+            th_x_arr[i] = th_y_arr[i] = th_z_arr[i] = 0.0f;
+            continue;
+        }
 
-    // ---- Step 3: Compute tilt angles in degrees
-    float cx = g_x / g_mag;
-    float cy = g_y / g_mag;
-    float cz = g_z / g_mag;
-    theta_x = acos(cx);
-    theta_y = acos(cy);
-    theta_z = acos(cz);
+        float cx = ax[i] / g_mag;
+        float cy = ay[i] / g_mag;
+        float cz = az[i] / g_mag;
+
+        // clamp for safety
+        cx = std::max(-1.0f, std::min(1.0f, cx));
+        cy = std::max(-1.0f, std::min(1.0f, cy));
+        cz = std::max(-1.0f, std::min(1.0f, cz));
+
+        th_x_arr[i] = std::acos(cx);
+        th_y_arr[i] = std::acos(cy);
+        th_z_arr[i] = std::acos(cz);
+    }
+
+    // Return median per axis
+    theta_x = compute_median(th_x_arr, n);
+    theta_y = compute_median(th_y_arr, n);
+    theta_z = compute_median(th_z_arr, n);
 }
 
 void
@@ -379,7 +390,7 @@ setup() {
 
     // --- f11–f13 (thetas already computed) ---
     start = micros();
-    compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, theta_x, theta_y, theta_z);
+    compute_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, theta_x, theta_y, theta_z);
     float elapsedTheta = micros() - start;
     float f11 = theta_x;
     float f12 = theta_y;

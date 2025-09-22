@@ -52,14 +52,12 @@ It supports 4 main stages of data processing:
 3. Build Machine Learning - ML dataset (X_data, y_data): Combines all feature files into a single dataset, assigns class labels based on file names,
     and saves the combined features and labels into 'X_data.csv' and 'y_data.csv', splits combine data to train - test datasets for ML, with the same 
     pattern to be followed for raw and g converted data.
-4. Feature Selection using ReliefF algorithm: Applies the ReliefF feature selection algorithm to the training dataset,
+4. Feature Selection */If you using only Python code and set matlab = 0/* using ReliefF algorithm: Applies the ReliefF feature selection algorithm to the training dataset,
     selects the top features based on their importance scores, and saves the reduced feature set and feature weights to CSV files.
-    The results are saved in 'X_train_reduced_idx_py.csv' and 'Python_relieff_feature_indices_weights.csv'.
-
-You can skip the stage 4 using the Matlab ReliefF program named: reliefF_feature_selection.m
-by setting the 'matlab' variable to 1. After running the Matlab program, press enter to continue to stage 6.
-
-5. Plotting the weight order best features and combine the ESP32 computation time.
+    The results are saved in 'X_train_reduced_idx_py.csv' and 'Python_relieff_feature_indices_weights.csv'. 
+    Plotting the weight order best features and combine the ESP32 computation time.
+    *** You can skip the ReliefF using the Matlab ReliefF program named: reliefF_feature_selection.m
+    by setting the 'matlab' variable to 1. *** 
     The results are saved in 'Relieff_Feature_Weights.png' and 'ESP32_computation_time.png'.
     Also, returns the indices of the 10 best selected weight based features for Edge AI implementation.
 
@@ -68,12 +66,32 @@ To run the program, set the 'data_process' variable set the variable accordingly
 - 1 for Feature Extraction
 - 2 for FFT Feature Processing
 - 3 for Build ML dataset (X_data, y_data) 
-- 4 for Feature Selection using ReliefF algorithm
-- 5 for Plotting the weight order best features and combine the ESP32 computation time.
+- 4 for mainly Plotting the weight order best features and combine the ESP32 computation time.
+    If using only Python: matlab = 0 -> for Feature Selection using ReliefF algorithm 
+    If using Matlab feature selection: matlab = 1 
+    
 To run all stages sequentially, set 'auto' to 1. To run only one stage, set 'auto' to 0.
-The 'window' variable defines the size of the number of the measurements - rows for all calulation of window-based features and processes.
-'''
 
+'''
+# ============================= MAIN PROGRAM ==================================
+
+# ------------------------------ Auto Runner Option ---------------------------
+# 0: run only one stage; 1: run all stages
+auto = 1
+# ------------------------------ Data Process Option --------------------------
+# 0: raw -> clean;  
+# 1: clean -> features preprocessed; 
+# 2: features preprocessed -> features final; 
+# 3: features final -> X_data, y_data; 
+# 4: a) X_data_train, y_data_train -> ReliefF selected features or only b) Plotting the weight order best features and combine the ESP32 computation time.
+
+data_process = 4
+# ----------------------------- Plotting Option -------------------------------
+pl = 1  # 0: no plots; 1: plots
+# ----------------------------- Matlab Option for ReleifF -------------------------------
+matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF 
+   
+# The 'window' variable defines the size of the number of the measurements - rows for all calulation of window-based features and processes.
 # ----------------------------- Window Size -----------------------------------
 # Define window in sec for data trimming to fit window size and window-based features
 window = 2 # sec
@@ -84,37 +102,12 @@ window = 2 # sec
 sampleRate = 9.71 # Sample rate in Hz     <-- Change this value to set sample rate
 window_size = int(round(window * sampleRate))
 print(f'Window size set to {window_size} rows for sample rate {sampleRate} Hz and window time {window} sec.')
-# ------------------------------ Auto Runner Option ---------------------------
-# 0: run only one stage; 1: run all stages
-auto = 0
-# ------------------------------ Data Process Option --------------------------
-# 0: raw -> clean;  
-# 1: clean -> features preprocessed; 
-# 2: features preprocessed -> features final; 
-# 3: features final -> X_data, y_data; 
-# 4: X_data, y_data -> ReliefF selected features; 
-# 5: Plotting the weight order best features and combine the ESP32 computation time.
-
-data_process = 3
-# ----------------------------- Plotting Option -------------------------------
-pl = 1  # 0: no plots; 1: plots
-# ----------------------------- Matlab Option for ReleifF -------------------------------
-matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF 
 
 # ---------------- File Configuration ----------------
 
-# ---------------- Import Libraries ------------------
-import pandas as pd
-import numpy as np
-# ----------------------------------------------------
 # Define the location for saving processed files
 # --- files for data_process = 0 ---
-
 input_path_0 = f'./0_RAW/{sampleRate}_Hz_sampling/' 
-output_path_0 = f'./1_CLEAN/{sampleRate}_Hz_sampling/'
-
-# Create output directory if it doesn't exist
-os.makedirs(output_path_0, exist_ok=True) 
 
 input_file_0 = [
     f'x_1_0mv_{sampleRate}.csv',f'y_1_0mv_{sampleRate}.csv',f'z_1_0mv_{sampleRate}.csv',
@@ -123,8 +116,11 @@ input_file_0 = [
     f'x_4_2st_p_min_{sampleRate}.csv', f'y_4_2st_p_min_{sampleRate}.csv', f'z_4_2st_p_min_{sampleRate}.csv',
     f'x_5_3st_p_min_w_ad_{sampleRate}.csv', f'y_5_3st_p_min_w_ad_{sampleRate}.csv',f'z_5_3st_p_min_w_ad_{sampleRate}.csv'
 ]
-output_file_0 = [f.replace('.csv', '_clean.csv') for f in input_file_0]
+output_path_0 = f'./1_CLEAN/{sampleRate}_Hz_sampling/'
 
+# Create output directory if it doesn't exist
+os.makedirs(output_path_0, exist_ok=True) 
+output_file_0 = [f.replace('.csv', '_clean.csv') for f in input_file_0]
 # --- files for data_process = 1 ---
 
 input_path_1 = output_path_0
@@ -165,24 +161,24 @@ input_file_4 = [f'X_train_{sampleRate}.csv',
                 f'y_train_{sampleRate}.csv',
                 ]
 weights_file = f'Python_relieff_feature_indices_weights_{sampleRate}.csv'
-
-# --- files for plots ---
-
-# Define the path for saving plots
-def plot (output_path):
-    plot_path = os.path.join(output_path, 'PLOTS')
-    # Create output directory if it doesn't exist
-    os.makedirs(plot_path, exist_ok=True)
-    return plot_path
-
+# ************ Stage Functions ************
 # ---------------- Data Process 0: for cleaning raw data ----------------
 def stage_0():
     print('\n ======= Data Process: 0 =======\n')
     # ---------------- Import Libraries ------------------
+    import os
+    import pandas as pd
     import csv
     import matplotlib.pyplot as plt
     # ----------------------------------------------------
     
+    # Define the path for saving plots
+    def plot (output_path):
+        plot_path = os.path.join(output_path, 'PLOTS')
+        # Create output directory if it doesn't exist
+        os.makedirs(plot_path, exist_ok=True)
+        return plot_path
+
     # ---- Check input files before processing ----
     for f in input_file_0:
         path = os.path.join(input_path_0, f)
@@ -314,69 +310,60 @@ def stage_0():
             plot_path_all = os.path.join(plot(output_path_0), plot_name)
             plt.savefig(plot_path_all, dpi=600)
             plt.show()
+            
+    return 
 
 # ---------------- Data Process 1: Feature Extraction ----------------
 def stage_1():
     print('\n======= Data Process: 1 =======\n')
+    t1=tic()
     # ---------------- Import Libraries ------------------
+    import os
+    import pandas as pd
+    import numpy as np
     from scipy.fft import fft
     from scipy.stats import iqr
+    from joblib import Parallel, delayed
+    import multiprocessing
     # ----------------------------------------------------
     
-    # ---- Check input files before processing ----
-    for f in input_file_1:
-        path = os.path.join(input_path_1, f)
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f'No _clean.csv files found in {input_path_1}. Cannot build feat_prepr.csv.')
-    
-    for file_idx in range(len(input_file_1)):  
+    def process_file(file_idx, fname):  
         df = pd.read_csv(input_path_1 + input_file_1[file_idx])
         print(f'Processing file: {input_file_1[file_idx]}')
         
         # Normalize acceleration to acceleration in g (9.80665 m/s^2)
         #--------------------------------------------------------------------
-        df['ag_x'] = (df['a_x'] / 9.80665).round(3)
-        df['ag_y'] = (df['a_y'] / 9.80665).round(3)
-        df['ag_z'] = (df['a_z'] / 9.80665).round(3)
+        df[['ag_x','ag_y','ag_z']] = (df[['a_x','a_y','a_z']] / 9.80665).round(3)
         #--------------------------------------------------------------------
         
         # Compute vector magnitudes
         #--------------------------------------------------------------------
-        df['SVM_a'] = np.sqrt(
-            df['ag_x']**2 + df['ag_y']**2 + df['ag_z']**2).round(3)
-        df['SVM_g'] = np.sqrt(
-            df['g_x']**2 + df['g_y']**2 + df['g_z']**2).round(3)
+        df['SVM_a'] = np.sqrt((df[['ag_x','ag_y','ag_z']]**2).sum(axis=1)).round(3)
+        df['SVM_g'] = np.sqrt((df[['g_x','g_y','g_z']]**2).sum(axis=1)).round(3)
         #--------------------------------------------------------------------
         
         # Cubic product features
         #--------------------------------------------------------------------
-        df['CM_a'] = (
-            abs(df['ag_x'] * df['ag_y'] * df['ag_z']) ** (1/3)).round(3)
-        df['CM_g'] = (
-            abs(df['g_x'] * df['g_y'] * df['g_z']) ** (1/3)).round(3)
+        df['CM_a'] = np.cbrt((df[['ag_x','ag_y','ag_z']].prod(axis=1)).abs()).round(3)
+        df['CM_g'] = np.cbrt((df[['g_x','g_y','g_z']].prod(axis=1)).abs()).round(3)
         #--------------------------------------------------------------------
         
         # Gradient features dt
         #--------------------------------------------------------------------
-        gradient_targets = {
-            'ag_x': 'jerk_x', 'ag_y': 'jerk_y', 'ag_z': 'jerk_z',
-            'g_x': 'accl_x', 'g_y': 'accl_y', 'g_z': 'accl_z'
-        }
-        for col, new_col in gradient_targets.items():
+        for col, new_col in {
+            'ag_x':'jerk_x','ag_y':'jerk_y','ag_z':'jerk_z',
+            'g_x':'accl_x','g_y':'accl_y','g_z':'accl_z'
+        }.items():
             df[new_col] = np.gradient(df[col], df['t (ms)']).round(3)
         #--------------------------------------------------------------------
 
         # Orientation angles (theta_x, theta_y, theta_z) in radians
         #--------------------------------------------------------------------
         # Gravity magnitude (~1 g if MPU6050 calibrated well)
-        df['g_mag'] = (np.sqrt(df['ag_x']**2 + df['ag_y']**2 + df['ag_z']**2)).round(3)
-
-        df['th_x'] = (np.arccos(df['ag_x'] / df['g_mag'])).round(3)
-        df['th_y'] = (np.arccos(df['ag_y'] / df['g_mag'])).round(3)
-        df['th_z'] = (np.arccos(df['ag_z'] / df['g_mag'])).round(3)        
-
-        # Cleanup helper column
-        df.drop(columns=['g_mag'], inplace=True) 
+        g_mag = np.sqrt((df[['ag_x','ag_y','ag_z']]**2).sum(axis=1))
+        df['th_x'] = np.arccos(df['ag_x']/g_mag).round(3)
+        df['th_y'] = np.arccos(df['ag_y']/g_mag).round(3)
+        df['th_z'] = np.arccos(df['ag_z']/g_mag).round(3)
         #--------------------------------------------------------------------
         
         # ================= Window-based features ================
@@ -391,10 +378,11 @@ def stage_1():
         sensor_cols = ['ag_x', 'ag_y', 'ag_z',
                        'g_x', 'g_y', 'g_z']
         agg_funcs = ['mean', 'max', 'min']
-        for col in sensor_cols:
-            for func in agg_funcs:
-                new_col = f'{col.replace(' ', '_')}_{func}'
-                df[new_col] = df.groupby('window_id')[col].transform(func).round(3) 
+        grouped = df.groupby('window_id')[sensor_cols]
+        
+        agg_df = grouped.agg(agg_funcs)
+        agg_df.columns = [f'{c}_{stat}' for c, stat in agg_df.columns]
+        df = df.merge(agg_df, on='window_id', how='left').round(3)
         #--------------------------------------------------------------------        
         
         # Signal magnitude area SMA  
@@ -419,10 +407,11 @@ def stage_1():
             # Cleanup temporary columns
         df.drop(columns=['_abs_sum_0', '_abs_sum_1'], inplace=True)
         #--------------------------------------------------------------------
-           
+      
+        
+        # Compute RMS, MAD, VAR, STD, IQR, FFT, Energy
         def compute_feat_per_window(df, columns_to_process, feats, choice):
             df = df.copy()
-            #df['window_id'] = (df.index // window) 
             for col in columns_to_process:
                 feat_col_name = f'{feats[choice]}_{col}'
                 df[feat_col_name] = np.nan
@@ -447,11 +436,9 @@ def stage_1():
             df[[f'{feats[choice]}_{col}' for col in columns_to_process]] = df[[f'{feats[choice]}_{col}' 
                                                                                for col in columns_to_process]].round(3)
             return df
-        
         sensor_cols = ['ag_x', 'ag_y', 'ag_z', 
                        'g_x', 'g_y', 'g_z']
         feats = ['RMS','MAD','VAR','STD','IQR','FFT','E']
-        
     
         # Root Mean Square (RMS), Mean Absolute Deviation (MAD), Variance (VAR), Standard Deviation (STD), 
         # Interquartile Range (IQR), Fast Fourier Transform (FFT), Energy (E) 
@@ -460,15 +447,37 @@ def stage_1():
             df = compute_feat_per_window(df, sensor_cols, feats, choice)
         #--------------------------------------------------------------------
         df.drop(columns=['window_id'], inplace=True)
+        
         # Saving feat to CSV
-        df.to_csv(output_path_1 + output_file_1[file_idx], index=False)
+        outname = output_file_1[file_idx]
+        df.to_csv(os.path.join(output_path_1, outname), index=False)
         
         # Print output file name
-        print(f'File saved as: {output_file_1[file_idx]}\n')
-
+        print(f'\nFile saved as: {outname}\n')
+        return 
+        
+    # ---- Check input files before processing ----
+    for f in input_file_1:
+        path = os.path.join(input_path_1, f)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f'No _clean.csv files found in {input_path_1}. Cannot build feat_prepr.csv.')    
+    n_jobs = max(1, multiprocessing.cpu_count() - 1)
+    Parallel(n_jobs=n_jobs, backend='loky')(
+        delayed(process_file)(i, f) for i, f in enumerate(input_file_1)
+    )
+    t2 = tic()
+    toc(t1, t2-t1)
+    return 
+        
 # ---------------- Data Process 2: ----------------
 def stage_2():
     print('\n======= Data Process: 2 =======\n')
+    # ---------------- Import Libraries ------------------
+    import os
+    import pandas as pd
+    import numpy as np
+    # ----------------------------------------------------
+    
      # ================= Step 1: Find STDs in FFTs features =================
     fft_std_path = os.path.join(input_path_2, 'fft_std.csv')
     # ------- _feat_prepr.csv' Checker --------
@@ -548,11 +557,17 @@ def stage_2():
         df.to_csv(out_file, index=False)
         # Print output file name
         print(f'Saved aggregated file: {output_file_2[file_idx]} with shape {df.shape}')
+    return 
 
 # ---------------- Data Process 3: ----------------
 def stage_3():
     print('\n======= Data Process: 3 =======\n')
     
+    # ---------------- Import Libraries ------------------
+    import os
+    import pandas as pd
+    import numpy as np
+    # ----------------------------------------------------
     # ------------------- Sub Function -------------------
     def TrainTestSplit(X, y, train_size=0.75, test_size=0.25):
         '''
@@ -711,60 +726,62 @@ def stage_3():
         
         df.to_csv(path, index=False, header=True)
         print(f'Saved {fname} with shape {df.shape}')
-        
-# ---------------- Data Process 4: ReliefF Feature Selection ----------------
-def stage_4():
-    print('\n======= Data Process: 4 =======\n') 
-    # ---------------- Import Libraries ------------------     
-    from skrebate import ReliefF
-    # ---------------------------------------------------- 
-    
-    # Paths for X and y (from Stage 4 outputs)
-    X_path = os.path.join(input_path_4, input_file_4[0])
-    y_path = os.path.join(input_path_4, input_file_4[1]) 
-    
-    # Load without headers
-    X_data = pd.read_csv(X_path,header=None, skiprows=1)
-    y_data = pd.read_csv(y_path, header=None, skiprows=1).squeeze('columns')  # 1D Series
-    
-    print(f'Loaded X_data: {X_data.shape}')
-    print(f'Loaded y_data: {y_data.shape}')
-    
-    # Convert to numpy arrays
-    X = X_data.to_numpy(dtype=np.float32)
-    y = y_data.to_numpy(dtype=np.int32) 
-    
-    # ReliefF (fix random_state to mimic MATLAB consistency)
-    relieff = ReliefF(
-        n_features_to_select=10,  # adjust as needed
-        n_neighbors=100,
-        discrete_threshold=10,
-        n_jobs = -1
-    )
-    relieff.fit_transform(X, y)
-    
-    # Save feature importance weights + indices
-    weights = relieff.feature_importances_
-    idx_sorted = np.argsort(weights)[::-1]  # descending order
-    
-    weights_df = pd.DataFrame({
-        'Feature_Index': idx_sorted,
-        'ReliefF_Weight': weights[idx_sorted]
-    }).round(6)
-    weights_df.to_csv(os.path.join(output_path_4, weights_file), index=False,float_format='%.6f')
-    
-    print(f'Saved ReliefF weights and indices: {weights_file}')
+    return   
 
-# ---------------- Data Process 5: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
-def stage_5():
-    print('\n======= Data Process: 5 =======\n')
+# ---------------- Data Process 4: ReliefF Feature Selection, Plotting and 10 best features, displaying for ESP32 use  ----------------
+def stage_4():
+    print('\n======= Data Process: 4 =======\n')
     # ---------------- Import Libraries ------------------
+    import os
+    import pandas as pd
+    import numpy as np
     import matplotlib.pyplot as plt
+    from skrebate import ReliefF
     # ----------------------------------------------------
     
+    # Define the path for saving plots
+    def plot (output_path):
+        plot_path = os.path.join(output_path, 'PLOTS')
+        # Create output directory if it doesn't exist
+        os.makedirs(plot_path, exist_ok=True)
+        return plot_path
+
     # ---- Step 0: Set file paths and index mode ----
     if matlab == 0:
         weights_file = os.path.join(output_path_4, f'Python_relieff_feature_indices_weights_{sampleRate}.csv')     
+        # Paths for X and y (from Stage 4 outputs)
+        X_path = os.path.join(input_path_4, input_file_4[0])
+        y_path = os.path.join(input_path_4, input_file_4[1]) 
+        
+        # Load without headers
+        X_data = pd.read_csv(X_path,header=None, skiprows=1)
+        y_data = pd.read_csv(y_path, header=None, skiprows=1).squeeze('columns')  # 1D Series
+        
+        print(f'Loaded X_data: {X_data.shape}')
+        print(f'Loaded y_data: {y_data.shape}')
+        
+        # Convert to numpy arrays
+        X = X_data.to_numpy(dtype=np.float32)
+        y = y_data.to_numpy(dtype=np.int32) 
+        
+        # ReliefF (fix random_state to mimic MATLAB consistency)
+        relieff = ReliefF(
+            n_features_to_select=10,  # adjust as needed
+            n_neighbors=100,
+            discrete_threshold=10,
+            n_jobs = -1
+        )
+        relieff.fit_transform(X, y)
+        
+        # Save feature importance weights + indices
+        weights = relieff.feature_importances_
+        idx_sorted = np.argsort(weights)[::-1]  # descending order
+        
+        weights_df = pd.DataFrame({
+            'Feature_Index': idx_sorted,
+            'ReliefF_Weight': weights[idx_sorted]
+        }).round(6)
+        weights_df.to_csv(os.path.join(output_path_4, weights_file), index=False,float_format='%.6f')   
         base_index = 0  # already 0-based
     else:
         weights_file = os.path.join(output_path_4, f'Matlab_relieff_feature_indices_weights_{sampleRate}.csv')
@@ -913,11 +930,14 @@ def stage_5():
         
     else:
         print('Warning: feats_computation_times.csv not found, skipping ESP32 plot.')
+    return 
 
-# ---------------- Data Process 6: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
-def stage_6():
-    print('\n======= Data Process: 6 =======\n')
+# ---------------- Data Process 5: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
+def stage_5():
+    print('\n======= Data Process: 5 =======\n')
     # ---------------- Import Libraries ------------------
+    import pandas as pd
+    import numpy as np
     import matplotlib.pyplot as plt
     import polars as pl
     from sklearn.model_selection import train_test_split, TimeSeriesSplit, cross_validate
@@ -985,30 +1005,22 @@ def stage_6():
             from sklearn.ensemble import RandomForestClassifier
             return RandomForestClassifier(), 'RandomForest'
     
+    
 # ============================= Auto Runner ===================================
-
-if auto == 0:
+if auto == 0: 
+    
     if data_process == 0: stage_0()
     elif data_process == 1: stage_1()
     elif data_process == 2: stage_2()
     elif data_process == 3: stage_3()
     elif data_process == 4: stage_4()
     elif data_process == 5: stage_5()
-    elif data_process == 6: stage_6()
 
     
 elif auto == 1:
     stage_0()
     stage_1()
     stage_2()
-    stage_3()
-    
-    if matlab == 0:
-        stage_4()
-
-    else:
-        print('\nSkipping stage 5: ReliefF Feature Selection in Matlab mode. Run reliefF_feature_selection.m and press enter to continue\n')
-        input('PRESS ENTER TO CONTINUE.')
-        
-    stage_5()
-    stage_6()
+    stage_3()       
+    stage_4()
+    #stage_5()
