@@ -50,9 +50,11 @@ Eloquent::ML::Port::DecisionTree model;
 // 4: Gradual movement detection 2 steps per minute (for x - > choice_num = 9, y - > choice_num = 10, z - > choice_num = 11)
 // 5: Gradual movement detection 3 steps per minute with random movement / anomaly detection (for x - > choice_num = 12, y - > choice_num = 13, z - > choice_num = 14)
 // Choice number for test data (0-14 for different test scenarios)
+
+int scenario = 1; // scenario of expirament 1-5
+char axis = 'y';  // Can be 'x', 'y', or 'z'
+
 int choice_num = 0; // Will be set based on scenario and axis
-int scenario = 5;   // scenario of expirament 1-5
-char axis = 'y';    // Can be 'x', 'y', or 'z'
 
 // Function to set choice_num based on scenario and axis
 void

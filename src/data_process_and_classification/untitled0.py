@@ -9,7 +9,7 @@ Created on Tue Sep  9 10:18:03 2025
 # Set the working directory to the script's location if running in Visual Studio Code
 import os
 # Change working directory for this script
-os.chdir(r'C:\Users\user\OneDrive\Έγγραφα\PlatformIO\Projects\bad-spine-wearable-1\src\data_process_and_classification') # modify this path to your working directory
+os.chdir(r'C:\Users\user\OneDrive - MSFT\PlatformIO\PlatformIO\Projects\bad-spine-wearable-1\src\data_process_and_classification') # modify this path to your working directory
 
 # ============================= Utility Functions =============================
 

@@ -7,7 +7,7 @@ Created on Thu Apr  3 20:08:53 2025
 # Set the working directory to the script's location if running in Visual Studio Code
 import os
 # Change working directory for this script
-os.chdir(r'C:\Users\user\OneDrive\Έγγραφα\PlatformIO\Projects\bad-spine-wearable-1\src\data_process_and_classification') # modify this path to your working directory
+os.chdir(r'C:\Users\user\OneDrive - MSFT\PlatformIO\PlatformIO\Projects\bad-spine-wearable-1\src\data_process_and_classification') # modify this path to your working directory
 
 # ============================= Utility Functions =============================
 
@@ -87,7 +87,7 @@ auto = 1
 
 data_process = 4
 # ----------------------------- Plotting Option -------------------------------
-pl = 1  # 0: no plots; 1: plots
+pl = 1 # 0: no plots; 1: plots
 # ----------------------------- Matlab Option for ReleifF -------------------------------
 matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF 
    
@@ -161,7 +161,7 @@ input_file_4 = [f'X_train_{sampleRate}.csv',
                 f'y_train_{sampleRate}.csv',
                 ]
 weights_file = f'Python_relieff_feature_indices_weights_{sampleRate}.csv'
-# ************ Stage Functions ************
+# **************** Stage Functions *********************
 # ---------------- Data Process 0: for cleaning raw data ----------------
 def stage_0():
     print('\n ======= Data Process: 0 =======\n')
@@ -329,7 +329,7 @@ def stage_1():
     
     def process_file(file_idx, fname):  
         df = pd.read_csv(input_path_1 + input_file_1[file_idx])
-        print(f'Processing file: {input_file_1[file_idx]}')
+        # print(f'Processing file: {input_file_1[file_idx]}')
         
         # Normalize acceleration to acceleration in g (9.80665 m/s^2)
         #--------------------------------------------------------------------
