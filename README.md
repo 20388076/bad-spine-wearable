@@ -50,14 +50,81 @@ More specific, based the workflow that it must be following, each program execut
     To run all stages sequentially, set 'auto' to 1. To run only one stage, set 'auto' to 0.
     The 'window' variable defines the size of the window for all data processes. 
 
-    -> ML_workflow.py
+
 
 3) ESP32 test files so that anyone can reproduce the experimental procedures, as well as the wearable device,  located in src.
 
 4) the final ESP32 sitting posture prediction file,  located in src, named main.cpp.
 
 
+## 📦 Requirements
+
+📎 You can set up the environment either with **Conda** (recommended) or with **pip**.
 
 
+## ⚙️ Setup with Conda (recommended)
 
-    -> main.cpp
+1. Make sure you have [Miniconda or Anaconda](https://docs.conda.io/en/latest/miniconda.html) installed.
+
+2. Create the environment: conda env create -f environment.yml
+
+3. Activate the environment running on terminal: conda activate env
+
+4. Select Python Interpreter: Press Ctrl+Shift+P then choose 👉 "Python: Select Interpreter" option and last choose your conda environment
+
+5. Run the Python preprocessing scripts 👍
+
+
+## ⚙️ Setup with pip (alternative way for non conda friends 🥲 )
+
+1. Make sure you have Python 3.12 installed.
+    (⚠️ Python 3.13 may still cause issues with multiprocessing / joblib, matlab.engine on Windows [at least to me it didn't work 😢]).
+
+2. Create a virtual environment running on terminal: python -m venv .venv
+
+3. Activate the environment running on terminal:
+    ✒️ On Linux/Mac: source .venv/bin/activate
+    ✒️ On Windows (PowerShell): .venv\Scripts\activate
+
+4. Install dependencies: pip install -r requirements.txt
+
+5. Run the Python preprocessing scripts 👍
+
+    
+## 📝 Notes
+
+- For Conda users:
+  After adding new packages, re-export the environment: conda env export --from-history > environment.yml
+
+- For pip users:
+  After adding new packages, update: pip freeze > requirements.txt
+
+- On Windows + Python 3.13, you may run into _posixsubprocess / joblib errors or matlab.engine.
+  Workaround: use Python 3.12 or 1 - set joblib in the last lines of the code on stage_1 locate backend and set it to "threading" instead of "loky" and 2 - use manual reliefF_feature_selection_manual.m file if you want use MATLAB's ReliefF instead of Python's. 
+
+- (OPTIONAL) if you use a installed version of MATLAB you can use matlab.engine for quick and robust code execution
+  
+  # For Conda Users
+
+    - You will need to run your Terminal or Anaconda Prompt as Administrator and run these commands:
+    
+    1. conda activate (Your environment name)
+    2. cd "C:\Program Files\MATLAB\(your matlab version e.g R2025b)\extern\engines\python" \\ or your own directory
+    3. python setup.py install
+
+  # For Pip Users
+
+    - You will need to run your Terminal as Administrator and run these commands:
+
+    1. cd "C:\Program Files\MATLAB\(your matlab version e.g R2025b)\extern\engines\python" \\ or your own directory
+    2. python setup.py install
+ 
+
+## 🤝 Contributing
+
+1. Fork this repo and create a new branch for your feature or bugfix.
+
+2. Submit a pull request when ready.
+
+3. Please update environment.yml or requirements.txt if you add new dependencies.
+

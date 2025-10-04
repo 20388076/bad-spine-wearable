@@ -1,0 +1,68 @@
+clc; clear;
+
+% Ask user for sampling rate
+fprintf(['Choose the Sample Rate you used:\n' ...
+    '[1] 9.71 Hz\n' ...
+    '[2] 10 Hz\n' ...
+    '[3] 50 Hz\n']);
+
+choice = input('Enter the sample rate choice: ');
+
+% Map user choice to sampling rate strings
+switch choice
+    case 1
+        rateStr = '9.71';
+    case 2
+        rateStr = '10';
+    case 3
+        rateStr = '50';
+    otherwise
+        error('Invalid choice. Please select 1, 2, or 3.');
+end
+classifier = 'DT';
+window = '2';
+% Define the folder where the files are stored
+dataFolder = fullfile('4_FEATS_COMBINED', rateStr + '_Hz_sampling', classifier);
+
+% Output folder
+outFolder  = fullfile('5_FEATS_SELECTION', rateStr + '_Hz_sampling', classifier);
+
+
+% Build full paths
+baseName = rateStr + classifier + window;
+
+Xfile = fullfile(dataFolder, 'X_train_' + baseName + '.csv');
+yfile = fullfile(dataFolder, 'y_train_' + baseName + '.csv');
+
+% Import data
+X = single(round(readmatrix(Xfile, 'NumHeaderLines', 1), 3));
+y = single(round(readmatrix(yfile, 'NumHeaderLines', 1), 0));
+
+% ReliefF feature selection
+[idx, weights] = relieff(X, y, 10);
+
+% Round weights to 6 decimals
+weights = double(weights(:))';
+weights = round(weights, 6);
+
+% Replace NaN with 0
+weights(isnan(weights)) = 0;
+
+% Combine idx and weights into one matrix
+results = zeros(length(idx),2);
+for i = 1:length(idx)
+    results(i,:) = [idx(i), weights(idx(i))];
+end
+
+% Define output file
+resultsFile = fullfile(outFolder, ...
+    'Matlab_relieff_feature_indices_weights_' + baseName + window + '.csv');
+
+% Save with two columns (idx, weight)
+writematrix(results, resultsFile);
+
+% Save with header
+fid = fopen(resultsFile, 'w');
+fprintf(fid, 'Feature_Index,ReliefF_Weight\n');  % headers
+fprintf(fid, '%d,%.6f\n', [results(:,1) results(:,2)].'); 
+fclose(fid);

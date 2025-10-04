@@ -37,7 +37,7 @@ TaskFunction_t Task1code1, Task1code2;
 #include "Best_RandomForest.h"
 Eloquent::ML::Port::RandomForest model;
 #else
-#include "Best_DecisionTree.h"
+#include "DT9.71W120.h" //"Best_DecisionTree.h"
 Eloquent::ML::Port::DecisionTree model;
 #endif
 
@@ -52,7 +52,7 @@ Eloquent::ML::Port::DecisionTree model;
 // Choice number for test data (0-14 for different test scenarios)
 
 int scenario = 1; // scenario of expirament 1-5
-char axis = 'y';  // Can be 'x', 'y', or 'z'
+char axis = 'x';  // Can be 'x', 'y', or 'z'
 
 int choice_num = 0; // Will be set based on scenario and axis
 
@@ -96,7 +96,7 @@ setChoiceNum() {
 float sampleRate = 9.71f; // Sample rate in Hz       <-- Change this value  according to your needs
 
 const int WINDOW =
-    19; // number of samples per window     <-- Change this value  based on the window size in seconds and sample rate
+    1165; // number of samples per window     <-- Change this value  based on the window size in seconds and sample rate
 // WINDOW = round( sampleRate * window size in seconds)
 // e.g. for 2 second window and sample rate 9.71 Hz, WINDOW = 19
 // e.g. for 2 second window and sample rate 10 Hz, WINDOW = 20
@@ -134,18 +134,8 @@ unsigned long start;                             // Start time variable
 // float fft_real_acc_x[WINDOW], fft_real_gyro_x[WINDOW]; // FFT real parts
 float theta_x, theta_y, theta_z; // tilt angles
 // FFT parameters
-float fft_real_acc_x[WINDOW];
-float fft_mag_acc_x[WINDOW];
-float fft_real_acc_y[WINDOW];
-float fft_mag_acc_y[WINDOW];
-float fft_real_acc_z[WINDOW];
-float fft_mag_acc_z[WINDOW];
-float fft_real_gyro_x[WINDOW];
-float fft_mag_gyro_x[WINDOW];
-float fft_real_gyro_y[WINDOW];
-float fft_mag_gyro_y[WINDOW];
-float fft_real_gyro_z[WINDOW];
-float fft_mag_gyro_z[WINDOW];
+float fft_real[WINDOW];
+float fft_mag[WINDOW];
 
 /* Features Functions */
 
@@ -414,7 +404,7 @@ Task1code(void* pvParameters) {
 
             if (sample_index < WINDOW - 1) {
                 t1 = millis() - start;
-                // Serial.printf("\nComputation time: %.2f ms\n", t1);
+                //Serial.printf("\nComputation time1: %.2f ms\n", t1);
                 vTaskDelay(pdMS_TO_TICKS(samplePeriod - t1));
 
             } else if (sample_index == WINDOW - 1) {
@@ -440,6 +430,7 @@ Task1code(void* pvParameters) {
                 float f9 = derivative_max(gyro_y_data, WINDOW, sampleRate);
                 // --- f10 ---
                 float f10 = derivative_max(gyro_z_data, WINDOW, sampleRate);
+                /*
                 // --- f11–f13 (thetas already computed) ---
                 compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, theta_x, theta_y, theta_z);
                 float f11 = theta_x;
@@ -534,47 +525,43 @@ Task1code(void* pvParameters) {
                 float f62 = compute_iqr(gyro_y_data, WINDOW);
                 float f63 = compute_iqr(gyro_z_data, WINDOW);
                 // --- f64 ---
-                compute_FFT_real(acc_x_data, fft_real_acc_x, WINDOW);
-                float f64 = fft_real_acc_x[1]; // first non-DC bin
+                compute_FFT_real(acc_x_data, fft_real, WINDOW);
+                float f64 = fft_real[1]; // first non-DC bin
                 // --- f65 ---
-                compute_FFT_real(acc_y_data, fft_real_acc_y, WINDOW);
-                float f65 = fft_real_acc_y[1];
+                compute_FFT_real(acc_y_data, fft_real, WINDOW);
+                float f65 = fft_real[1];
                 // --- f66 ---
-                compute_FFT_real(acc_z_data, fft_real_acc_z, WINDOW);
-                float f66 = fft_real_acc_z[1];
+                compute_FFT_real(acc_z_data, fft_real, WINDOW);
+                float f66 = fft_real[1];
                 // --- f67 ---
-                compute_FFT_real(gyro_x_data, fft_real_gyro_x, WINDOW);
-                float f67 = fft_real_gyro_x[1];
+                compute_FFT_real(gyro_x_data, fft_real, WINDOW);
+                float f67 = fft_real[1];
                 // --- f68 ---
-                compute_FFT_real(gyro_y_data, fft_real_gyro_y, WINDOW);
-                float f68 = fft_real_gyro_y[1];
+                compute_FFT_real(gyro_y_data, fft_real, WINDOW);
+                float f68 = fft_real[1];
                 // --- f69 ---
-                compute_FFT_real(gyro_z_data, fft_real_gyro_z, WINDOW);
-                float f69 = fft_real_gyro_z[1];
+                compute_FFT_real(gyro_z_data, fft_real, WINDOW);
+                float f69 = fft_real[1];
                 // --- f70 ---
-                compute_FFT_mag(acc_x_data, fft_mag_acc_x, WINDOW);
-                float f70 = compute_fft_energy(fft_mag_acc_x, WINDOW);
+                compute_FFT_mag(acc_x_data, fft_mag, WINDOW);
+                float f70 = compute_fft_energy(fft_mag, WINDOW);
                 // --- f71 ---
-                compute_FFT_mag(acc_y_data, fft_mag_acc_y, WINDOW);
-                float f71 = compute_fft_energy(fft_mag_acc_y, WINDOW);
+                compute_FFT_mag(acc_y_data, fft_mag, WINDOW);
+                float f71 = compute_fft_energy(fft_mag, WINDOW);
                 // --- f72 ---
-                compute_FFT_mag(acc_z_data, fft_mag_acc_z, WINDOW);
-                float f72 = compute_fft_energy(fft_mag_acc_z, WINDOW);
+                compute_FFT_mag(acc_z_data, fft_mag, WINDOW);
+                float f72 = compute_fft_energy(fft_mag, WINDOW);
                 // --- f73 ---
-                compute_FFT_mag(gyro_x_data, fft_mag_gyro_x, WINDOW);
-                float f73 = compute_fft_energy(fft_mag_gyro_x, WINDOW);
+                compute_FFT_mag(gyro_x_data, fft_mag, WINDOW);
+                float f73 = compute_fft_energy(fft_mag, WINDOW);
                 // --- f74 ---
-                compute_FFT_mag(gyro_y_data, fft_mag_gyro_y, WINDOW);
-                float f74 = compute_fft_energy(fft_mag_gyro_y, WINDOW);
+                compute_FFT_mag(gyro_y_data, fft_mag, WINDOW);
+                float f74 = compute_fft_energy(fft_mag, WINDOW);
                 // --- f75 ---
-                compute_FFT_mag(gyro_z_data, fft_mag_gyro_z, WINDOW);
-                float f75 = compute_fft_energy(fft_mag_gyro_z, WINDOW);
-
-                float values[] = {f1,  f2,  f3,  f4,  f5,  f6,  f7,  f8,  f9,  f10, f11, f12, f13, f14, f15,
-                                  f16, f17, f18, f19, f20, f21, f22, f23, f24, f25, f26, f27, f28, f29, f30,
-                                  f31, f32, f33, f34, f35, f36, f37, f38, f39, f40, f41, f42, f43, f44, f45,
-                                  f46, f47, f48, f49, f50, f51, f52, f53, f54, f55, f56, f57, f58, f59, f60,
-                                  f61, f62, f63, f64, f65, f66, f67, f68, f69, f70, f71, f72, f73, f74, f75};
+                compute_FFT_mag(gyro_z_data, fft_mag, WINDOW);
+                float f75 = compute_fft_energy(fft_mag, WINDOW);
+                */
+                float values[] = {f1, f2, f3, f4, f5, f6, f7, f8, f9, f10};
 
                 int predicted = model.predict(values);
 
@@ -585,9 +572,9 @@ Task1code(void* pvParameters) {
                     correct++;
                 }
                 t2 = millis() - start;
-                // Serial.printf("\nComputation time: %.2f ms\n", t2);
+                Serial.printf("\nComputation time2: %.2f ms\n", t2);
                 iteration++;
-                vTaskDelay(pdMS_TO_TICKS(samplePeriod - t2));
+                vTaskDelay(pdMS_TO_TICKS((1000 * samplePeriod) - t2));
             }
         }
     }

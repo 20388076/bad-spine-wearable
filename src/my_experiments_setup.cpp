@@ -40,7 +40,7 @@ TaskFunction_t Task1code1, Task1code2;
 // 3: Gradual movement detection 1 step per minute
 // 4: Gradual movement detection 2 steps per minute
 // 5: Gradual movement detection 3 steps per minute with random movement / anomaly detection
-int scenario = 1; // scenario of expirament 1-5
+int scenario = 3; // scenario of expirament 1-5
 
 /* Servo Variables configuration */
 
@@ -56,7 +56,7 @@ int step;                             // Factor to decrease position by degrees 
 
 float t;                                         // Measurements computation time variable
 unsigned long start;                             // Start time variable
-float sampleRate = 10.0;                         // Sample rate in Hz     <-- Change this value to set sample rate
+float sampleRate = 50.0;                         // Sample rate in Hz     <-- Change this value to set sample rate
 float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
 
 // Task1code: Read data from MPU6050 and print to Serial Monitor

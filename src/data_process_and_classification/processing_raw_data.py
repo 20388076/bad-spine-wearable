@@ -26,7 +26,11 @@ def tic():
 # ----------------------------- Process time return ---------------------------
 def toc(t1, s):
     t2 = float(time.time())
-    print(f'{s} time taken: {t2 - t1:.6e} seconds')
+    elapsed = t2 - t1
+    minutes = int(elapsed // 60)
+    seconds = int(elapsed % 60)
+    milliseconds = int((elapsed * 1000) % 1000)
+    print(f" time taken: {minutes:02d} min:{seconds:02d} s:{milliseconds:03d} millis") 
 # ----------------------------- Kernel break ----------------------------------
 def RETURN():
     sys.exit()
@@ -61,7 +65,7 @@ It supports 4 main stages of data processing:
     The results are saved in 'Relieff_Feature_Weights.png' and 'ESP32_computation_time.png'.
     Also, returns the indices of the 10 best selected weight based features for Edge AI implementation.
 
-To run the program, set the 'data_process' variable set the variable accordingly to the desired operation:
+To run the program, set the 'stage' variable set the variable accordingly to the desired operation:
 - 0 for Data Cleaning
 - 1 for Feature Extraction
 - 2 for FFT Feature Processing
@@ -74,7 +78,7 @@ To run all stages sequentially, set 'auto' to 1. To run only one stage, set 'aut
 
 '''
 # ============================= MAIN PROGRAM ==================================
-
+series_of_experiments = 1 #
 # ------------------------------ Auto Runner Option ---------------------------
 # 0: run only one stage; 1: run all stages
 auto = 1
@@ -83,84 +87,92 @@ auto = 1
 # 1: clean -> features preprocessed; 
 # 2: features preprocessed -> features final; 
 # 3: features final -> X_data, y_data; 
-# 4: a) X_data_train, y_data_train -> ReliefF selected features or only b) Plotting the weight order best features and combine the ESP32 computation time.
+# 4: a) X_data_train, y_data_train -> ReliefF selected features or only 
+#    b) Plotting the weight order best features and combine the ESP32 computation time.
 
-data_process = 4
-# ----------------------------- Plotting Option -------------------------------
-pl = 1 # 0: no plots; 1: plots
-# ----------------------------- Matlab Option for ReleifF -------------------------------
-matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF 
-   
-# The 'window' variable defines the size of the number of the measurements - rows for all calulation of window-based features and processes.
+stage = 2
+
+# ----------------------------- Matlab Option for ReleifF ---------------------
+matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF   
 # ----------------------------- Window Size -----------------------------------
-# Define window in sec for data trimming to fit window size and window-based features
-window = 2 # sec
+# Define window in sec for data trimming to fit window size and window-based features per classifier
+windows = [120,120] # sec  <-- Change this table to set time window per classifier
+# ----------------------------- Sample Rate Dataset ---------------------------
 # Available Datasets
 # 1) 9.71 Hz
 # 2) 10 Hz
 # 3) 50 Hz
 sampleRate = 9.71 # Sample rate in Hz     <-- Change this value to set sample rate
-window_size = int(round(window * sampleRate))
-print(f'Window size set to {window_size} rows for sample rate {sampleRate} Hz and window time {window} sec.')
+# ----------------------------- Classifier Factory ----------------------------
+def get_classifier(cl):
+    if cl == 0:  # Decision Tree 
+        from sklearn.tree import DecisionTreeClassifier
+        return DecisionTreeClassifier(), 'DT'
+    elif cl == 1:  # Random Forest 
+        from sklearn.ensemble import RandomForestClassifier
+        return RandomForestClassifier(), 'RF'
+    
+# if you add more classifiers change this value based on the overall number of classifiers
+n_classifiers = 2  # DecisionTree, RandomForest
 
-# ---------------- File Configuration ----------------
+# ----------------------------- Window Search Value -----------------------------------
+window_search = 0 # Set 1 to search for the best time window from a list of time window named candidate_windows
+candidate_windows = [0.8,1,2,3,5,8,10,20,30,50,80,100,120,130,150] # in sec (800ms - 2.5min)
+# ----------------------------- File Configuration ----------------------------
 
-# Define the location for saving processed files
-# --- files for data_process = 0 ---
-input_path_0 = f'./0_RAW/{sampleRate}_Hz_sampling/' 
+def get_paths(stage, sampleRate, classifier_name):
+    base = f"{sampleRate}_Hz_sampling/{classifier_name}"
+    if series_of_experiments == 1:
+        exp_files = [
+            f'x_1_0mv_{sampleRate}.csv',f'y_1_0mv_{sampleRate}.csv',f'z_1_0mv_{sampleRate}.csv',
+            f'x_2_r_mv_{sampleRate}.csv',f'y_2_r_mv_{sampleRate}.csv', f'z_2_r_mv_{sampleRate}.csv',
+            f'x_3_1st_p_min_{sampleRate}.csv', f'y_3_1st_p_min_{sampleRate}.csv', f'z_3_1st_p_min_{sampleRate}.csv',
+            f'x_4_2st_p_min_{sampleRate}.csv', f'y_4_2st_p_min_{sampleRate}.csv', f'z_4_2st_p_min_{sampleRate}.csv',
+            f'x_5_3st_p_min_w_ad_{sampleRate}.csv', f'y_5_3st_p_min_w_ad_{sampleRate}.csv',f'z_5_3st_p_min_w_ad_{sampleRate}.csv'
+        ]
+        exp_path = f'./0_RAW/series_of_experiments_1/{sampleRate}_Hz_sampling/'
+    elif series_of_experiments == 2:
+        exp_files = []
+        exp_path = f'./0_RAW/series_of_experiments_2/{sampleRate}_Hz_sampling/'
+    if stage == 0:
+        in_files = exp_files
+        in_path =  exp_path
+        out_path = f'./1_CLEAN/{base}/'
+        out_files = [f"{fname.replace('.csv', f'{classifier_name}_clean.csv')}"
+                 for fname in exp_files]
+    elif stage == 1:
+        in_files = [f"{fname.replace('.csv', f'{classifier_name}_clean.csv')}"
+                 for fname in exp_files]
+        in_path = f'./1_CLEAN/{base}/'
+        out_path = f'./2_FEATS_PREPROCESSSED/{base}/'
+        out_files = [f"{fname.replace('.csv', f'{classifier_name}_feat_prepr.csv')}"
+                 for fname in exp_files]
+    elif stage == 2: 
+        in_files = [f"{fname.replace('.csv', f'{classifier_name}_feat_prepr.csv')}"
+                 for fname in exp_files]
+        in_path =  f'./2_FEATS_PREPROCESSSED/{base}/'
+        out_path = f'./3_FEATS/{base}/'
+        out_files = [f"{fname.replace('.csv', f'{classifier_name}_feat.csv')}"
+                 for fname in exp_files]
+    elif stage == 3:
+        in_files = [f"{fname.replace('.csv', f'{classifier_name}_feat.csv')}"
+                 for fname in exp_files]
+        in_path = f'./3_FEATS/{base}/'
+        out_path = f'./4_FEATS_COMBINED/{base}/'
+        out_files = []
+        
+    elif stage == 4:
+        in_files = [f"X_data_{sampleRate}{classifier_name}.csv",
+                 f"y_data_{sampleRate}{classifier_name}.csv"]
+        in_path = f'./4_FEATS_COMBINED/{base}/'
+        out_path = f'./5_FEATS_SELECTION/{base}/'
+        time_path = exp_path 
+    else:
+        raise ValueError("Invalid stage")
 
-input_file_0 = [
-    f'x_1_0mv_{sampleRate}.csv',f'y_1_0mv_{sampleRate}.csv',f'z_1_0mv_{sampleRate}.csv',
-    f'x_2_r_mv_{sampleRate}.csv',f'y_2_r_mv_{sampleRate}.csv', f'z_2_r_mv_{sampleRate}.csv',
-    f'x_3_1st_p_min_{sampleRate}.csv', f'y_3_1st_p_min_{sampleRate}.csv', f'z_3_1st_p_min_{sampleRate}.csv',
-    f'x_4_2st_p_min_{sampleRate}.csv', f'y_4_2st_p_min_{sampleRate}.csv', f'z_4_2st_p_min_{sampleRate}.csv',
-    f'x_5_3st_p_min_w_ad_{sampleRate}.csv', f'y_5_3st_p_min_w_ad_{sampleRate}.csv',f'z_5_3st_p_min_w_ad_{sampleRate}.csv'
-]
-output_path_0 = f'./1_CLEAN/{sampleRate}_Hz_sampling/'
-
-# Create output directory if it doesn't exist
-os.makedirs(output_path_0, exist_ok=True) 
-output_file_0 = [f.replace('.csv', '_clean.csv') for f in input_file_0]
-# --- files for data_process = 1 ---
-
-input_path_1 = output_path_0
-output_path_1 = f'./2_FEATS_PREPROCESSSED/{sampleRate}_Hz_sampling/'
-
-# Create output directory if it doesn't exist
-os.makedirs(output_path_1, exist_ok=True) 
-
-input_file_1 = output_file_0
-output_file_1 = [f.replace('.csv', '_feat_prepr.csv') for f in input_file_0]
-
-# --- files for data_process = 2 ---
-
-input_path_2 = output_path_1
-output_path_2 = f'./3_FEATS/{sampleRate}_Hz_sampling/'
-
-# Create output directory if it doesn't exist
-os.makedirs(output_path_2, exist_ok=True) 
-
-input_file_2 = output_file_1
-output_file_2 = [f.replace('.csv', '_feat.csv') for f in input_file_0]
-
-# --- files for data_process = 3 ---
-
-input_path_3 = output_path_2
-output_path_3 = f'./4_FEATS_COMBINED/{sampleRate}_Hz_sampling/'
-os.makedirs(output_path_3, exist_ok=True)
-
-# --- files for data_process = 4 & 5 ---
-
-input_path_4 = output_path_3
-output_path_4 = f'./5_FEATS_SELECTION/{sampleRate}_Hz_sampling/'
-
-# Create output directory if it doesn't exist
-os.makedirs(output_path_4, exist_ok=True) 
-
-input_file_4 = [f'X_train_{sampleRate}.csv',
-                f'y_train_{sampleRate}.csv',
-                ]
-weights_file = f'Python_relieff_feature_indices_weights_{sampleRate}.csv'
+    os.makedirs(out_path, exist_ok=True)
+    
+    return in_files, in_path, (out_files if stage != 4 else time_path), out_path
 # **************** Stage Functions *********************
 # ---------------- Data Process 0: for cleaning raw data ----------------
 def stage_0():
@@ -178,7 +190,9 @@ def stage_0():
         # Create output directory if it doesn't exist
         os.makedirs(plot_path, exist_ok=True)
         return plot_path
-
+    
+    input_file_0, input_path_0, output_file_0, output_path_0 = get_paths(0, sampleRate, classifier_name)
+    
     # ---- Check input files before processing ----
     for f in input_file_0:
         path = os.path.join(input_path_0, f)
@@ -257,11 +271,11 @@ def stage_0():
         # -------------------------------
         axis_labels = {'x': 'X Axis', 'y': 'Y Axis', 'z': 'Z Axis'}
         step_conditions = {
-            0: f'1_0mv_{sampleRate}_clean.csv',
-            1: f'2_r_mv_{sampleRate}_clean.csv',   
-            2: f'3_1st_p_min_{sampleRate}_clean.csv',
-            3: f'4_2st_p_min_{sampleRate}_clean.csv',
-            4: f'5_3st_p_min_w_ad_{sampleRate}_clean.csv'
+            0: f'1_0mv_{sampleRate}{classifier_name}_clean.csv',
+            1: f'2_r_mv_{sampleRate}{classifier_name}_clean.csv',   
+            2: f'3_1st_p_min_{sampleRate}{classifier_name}_clean.csv',
+            3: f'4_2st_p_min_{sampleRate}{classifier_name}_clean.csv',
+            4: f'5_3st_p_min_w_ad_{sampleRate}{classifier_name}_clean.csv'
         }
         
         for axis, axis_name in axis_labels.items():
@@ -326,6 +340,7 @@ def stage_1():
     from joblib import Parallel, delayed
     import multiprocessing
     # ----------------------------------------------------
+    input_file_1, input_path_1, output_file_1, output_path_1 = get_paths(1, sampleRate, classifier_name)
     
     def process_file(file_idx, fname):  
         df = pd.read_csv(input_path_1 + input_file_1[file_idx])
@@ -453,7 +468,7 @@ def stage_1():
         df.to_csv(os.path.join(output_path_1, outname), index=False)
         
         # Print output file name
-        print(f'\nFile saved as: {outname}\n')
+        # print(f'\nFile saved as: {outname}\n')
         return 
         
     # ---- Check input files before processing ----
@@ -477,6 +492,8 @@ def stage_2():
     import pandas as pd
     import numpy as np
     # ----------------------------------------------------
+    
+    input_file_2, input_path_2, output_file_2, output_path_2 = get_paths(2, sampleRate, classifier_name)
     
      # ================= Step 1: Find STDs in FFTs features =================
     fft_std_path = os.path.join(input_path_2, 'fft_std.csv')
@@ -554,6 +571,7 @@ def stage_2():
             
         # ---- Save aggregated dataset ----
         out_file = os.path.join(output_path_2, output_file_2[file_idx])
+        df = df.drop(columns=['t (ms)'],errors='ignore')
         df.to_csv(out_file, index=False)
         # Print output file name
         print(f'Saved aggregated file: {output_file_2[file_idx]} with shape {df.shape}')
@@ -619,9 +637,10 @@ def stage_3():
             
         return X_train, X_test, y_train, y_test
     # ----------------------------------------------------
-    
+    input_file_3, input_path_3, output_file_3, output_path_3 = get_paths(3, sampleRate, classifier_name)
+     
     # Collect all processed feature files from Stage 3
-    feat_files = output_file_2  
+    feat_files = input_file_3  
     
     all_X = []
     all_y = []
@@ -687,8 +706,8 @@ def stage_3():
     norm_y = pd.Series(np.concatenate(norm_labels), name='label')
     
     # Train - Test split before feature selection for models accuracy evaluation
-    train_size=0.75
-    test_size=0.25
+    train_size = 0.75
+    test_size = 0.25
     X_train, X_test, y_train, y_test = TrainTestSplit(X_data, y_data, train_size, test_size)
     
     raw_train, raw_test, y_raw_train, y_raw_test = TrainTestSplit(all_raw_data, raw_y, train_size, test_size)
@@ -697,28 +716,28 @@ def stage_3():
     # ---- Save datasets (headers, NO index) ----
     save_items = {
         # aggregated features
-        f'X_data_{sampleRate}.csv': X_data,
-        f'y_data_{sampleRate}.csv': y_data.to_frame(),   # ensure it has name 'label'
-        f'X_train_{sampleRate}.csv': pd.DataFrame(X_train, columns=X_data.columns, dtype=np.float32),
-        f'y_train_{sampleRate}.csv': pd.DataFrame(y_train, columns=['label']),
-        f'X_test_{sampleRate}.csv': pd.DataFrame(X_test, columns=X_data.columns, dtype=np.float32),
-        f'y_test_{sampleRate}.csv': pd.DataFrame(y_test, columns=['label']),
+        f'X_data_{sampleRate}{classifier_name}.csv': X_data,
+        f'y_data_{sampleRate}{classifier_name}.csv': y_data.to_frame(),   # ensure it has name 'label'
+        f'X_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(X_train, columns=X_data.columns, dtype=np.float32),
+        f'y_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_train, columns=['label']),
+        f'X_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(X_test, columns=X_data.columns, dtype=np.float32),
+        f'y_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_test, columns=['label']),
         
         # raw version
-        f'all_raw_data_{sampleRate}.csv': all_raw_data,
-        f'y_all_raw_data_{sampleRate}.csv': pd.DataFrame(raw_y, columns=['label']),
-        f'all_raw_train_{sampleRate}.csv': pd.DataFrame(raw_train, columns=all_raw_data.columns, dtype=np.float32),
-        f'y_all_raw_train_{sampleRate}.csv': pd.DataFrame(y_raw_train, columns=['label']),
-        f'all_raw_test_{sampleRate}.csv': pd.DataFrame(raw_test, columns=all_raw_data.columns, dtype=np.float32),
-        f'y_all_raw_test_{sampleRate}.csv': pd.DataFrame(y_raw_test, columns=['label']),
+        f'all_raw_data_{sampleRate}{classifier_name}.csv': all_raw_data,
+        f'y_all_raw_data_{sampleRate}{classifier_name}.csv': pd.DataFrame(raw_y, columns=['label']),
+        f'all_raw_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(raw_train, columns=all_raw_data.columns, dtype=np.float32),
+        f'y_all_raw_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_raw_train, columns=['label']),
+        f'all_raw_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(raw_test, columns=all_raw_data.columns, dtype=np.float32),
+        f'y_all_raw_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_raw_test, columns=['label']),
         
         # norm version
-        f'all_norm_data_{sampleRate}.csv': all_norm_data,
-        f'y_all_norm_data_{sampleRate}.csv': pd.DataFrame(norm_y, columns=['label']),
-        f'all_norm_train_{sampleRate}.csv': pd.DataFrame(norm_train, columns=all_norm_data.columns, dtype=np.float32),
-        f'y_all_norm_train_{sampleRate}.csv': pd.DataFrame(y_norm_train, columns=['label']),
-        f'all_norm_test_{sampleRate}.csv': pd.DataFrame(norm_test, columns=all_norm_data.columns, dtype=np.float32),
-        f'y_all_norm_test_{sampleRate}.csv': pd.DataFrame(y_norm_test, columns=['label']),
+        f'all_norm_data_{sampleRate}{classifier_name}.csv': all_norm_data,
+        f'y_all_norm_data_{sampleRate}{classifier_name}.csv': pd.DataFrame(norm_y, columns=['label']),
+        f'all_norm_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(norm_train, columns=all_norm_data.columns, dtype=np.float32),
+        f'y_all_norm_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_norm_train, columns=['label']),
+        f'all_norm_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(norm_test, columns=all_norm_data.columns, dtype=np.float32),
+        f'y_all_norm_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_norm_test, columns=['label']),
     }
     
     for fname, df in save_items.items():
@@ -729,63 +748,135 @@ def stage_3():
     return   
 
 # ---------------- Data Process 4: ReliefF Feature Selection, Plotting and 10 best features, displaying for ESP32 use  ----------------
+    
 def stage_4():
+    """
+    Stage 4: ReliefF Feature Selection
+    - Runs in Python by default.
+    - If matlab=1, tries MATLAB Engine API, then Octave, else falls back to manual MATLAB Online.
+    """
     print('\n======= Data Process: 4 =======\n')
     # ---------------- Import Libraries ------------------
     import os
     import pandas as pd
     import numpy as np
     import matplotlib.pyplot as plt
-    from skrebate import ReliefF
     # ----------------------------------------------------
-    
     # Define the path for saving plots
     def plot (output_path):
         plot_path = os.path.join(output_path, 'PLOTS')
         # Create output directory if it doesn't exist
         os.makedirs(plot_path, exist_ok=True)
         return plot_path
+    
+    def run_python_relieff():
+        """Python ReliefF (skrebate)"""
+        from skrebate import ReliefF
+        print(" Running ReliefF in Python (skrebate)...")
 
-    # ---- Step 0: Set file paths and index mode ----
-    if matlab == 0:
-        weights_file = os.path.join(output_path_4, f'Python_relieff_feature_indices_weights_{sampleRate}.csv')     
-        # Paths for X and y (from Stage 4 outputs)
+        weights_file = os.path.join(output_path_4,
+            f'Python_relieff_feature_indices_weights_{sampleRate}{classifier_name}{window}.csv')
+
+        # Load train data
         X_path = os.path.join(input_path_4, input_file_4[0])
-        y_path = os.path.join(input_path_4, input_file_4[1]) 
-        
-        # Load without headers
-        X_data = pd.read_csv(X_path,header=None, skiprows=1)
-        y_data = pd.read_csv(y_path, header=None, skiprows=1).squeeze('columns')  # 1D Series
-        
-        print(f'Loaded X_data: {X_data.shape}')
-        print(f'Loaded y_data: {y_data.shape}')
-        
-        # Convert to numpy arrays
+        y_path = os.path.join(input_path_4, input_file_4[1])
+        X_data = pd.read_csv(X_path, header=None, skiprows=1)
+        y_data = pd.read_csv(y_path, header=None, skiprows=1).squeeze("columns")
+
         X = X_data.to_numpy(dtype=np.float32)
-        y = y_data.to_numpy(dtype=np.int32) 
-        
-        # ReliefF (fix random_state to mimic MATLAB consistency)
+        y = y_data.to_numpy(dtype=np.int32)
+
         relieff = ReliefF(
-            n_features_to_select=10,  # adjust as needed
+            n_features_to_select=10,
             n_neighbors=100,
             discrete_threshold=10,
-            n_jobs = -1
+            n_jobs=-1
         )
         relieff.fit_transform(X, y)
-        
-        # Save feature importance weights + indices
+
         weights = relieff.feature_importances_
-        idx_sorted = np.argsort(weights)[::-1]  # descending order
-        
+        idx_sorted = np.argsort(weights)[::-1]
         weights_df = pd.DataFrame({
             'Feature_Index': idx_sorted,
             'ReliefF_Weight': weights[idx_sorted]
         }).round(6)
-        weights_df.to_csv(os.path.join(output_path_4, weights_file), index=False,float_format='%.6f')   
-        base_index = 0  # already 0-based
+        weights_df.to_csv(weights_file, index=False, float_format='%.6f')
+
+        return weights_file, 0  # base_index = 0 for Python
+
+    def run_matlab_engine():
+        """MATLAB Engine API"""
+        try:
+            import matlab.engine
+            print(" Running ReliefF in MATLAB (MATLAB Engine API)...")
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            eng = matlab.engine.start_matlab()
+            eng.addpath(script_dir, nargout=0)  # add current folder
+            eng.relieff_feature_selection(sampleRate,classifier_name,window, nargout=0)
+            eng.quit()
+
+            weights_file = os.path.join(output_path_4,
+                f'Matlab_relieff_feature_indices_weights_{sampleRate}{classifier_name}{window}.csv')
+            return weights_file, 1  # base_index = 1 (MATLAB is 1-based)
+        except ImportError:
+            print(" MATLAB Engine for Python is not installed. Install with: pip install matlabengine")
+            return None, None
+        except Exception:
+            print(" MATLAB Engine not available:")
+            return None, None
+        except:
+            return None, None
+        
+    def check_existing_weights(output_path_4, sampleRate, classifier_name, window):
+        weights_file = os.path.join(
+            output_path_4,
+            f'Matlab_relieff_feature_indices_weights_{sampleRate}{classifier_name}{window}.csv'
+        )
+        if os.path.isfile(weights_file):
+            print(f"\nFound existing weights file: {weights_file}\n")
+            return weights_file
+        else:
+            print("\nIt will take couple time\n")
+            return None
+        
+    def wait_for_key():
+        import keyboard 
+        print("   MATLAB Engine is not working/available.")
+        print("   Please see the type of error or run relieff_feature_selection.m manually in MATLAB Online:")
+        print("   1. Go to https://matlab.mathworks.com")
+        print("   2. Upload relieff_feature_selection_manual.m and training CSVs")
+        print("   3. Run: relieff_feature_selection -> ('<sampleRate>')")
+        print("   4. Download the generated CSV into:")
+        print(f"      {output_path_4}")
+        print("Press ENTER to continue or ESC to quit...")
+        while True:
+            if keyboard.is_pressed("enter"):
+                print("Continuing...")
+                return True
+            elif keyboard.is_pressed("esc"):
+                print("Exiting...")
+                sys.exit(0)
+    # ---- Step 0: Set file paths and index mode ----
+    input_file_4, input_path_4, time_path, output_path_4 = get_paths(4, sampleRate, classifier_name)
+    
+    if matlab == 1:
+        # Step 0: Check if file already exists
+
+        existing_file = check_existing_weights(output_path_4, sampleRate, classifier_name, window)
+        if existing_file:
+            weights_file, base_index = existing_file, 1  # MATLAB uses 1-based indexing
+        else:
+            t1 = tic()
+            weights_file, base_index = run_matlab_engine()
+            t2 = tic()
+            toc(t1, t2 - t1)
+
+            if weights_file is None:  # manual fallback
+                wait_for_key()
+                weights_file = os.path.join(output_path_4, f'Matlab_relieff_feature_indices_weights_{sampleRate}{classifier_name}{window}.csv')
+                base_index = 1
     else:
-        weights_file = os.path.join(output_path_4, f'Matlab_relieff_feature_indices_weights_{sampleRate}.csv')
-        base_index = 1  # MATLAB output is 1-based, will subtract later
+         weights_file, base_index = run_python_relieff()
         
     names = ['Python', 'Matlab']
     # ---- Step 1: Load weights ----
@@ -796,8 +887,8 @@ def stage_4():
     weights_df['Feature_Index'] = weights_df['Feature_Index'] - base_index
     
     # ---- Step 2: Load features ----
-    X_train = pd.read_csv(os.path.join(output_path_3, f'X_train_{sampleRate}.csv'))
-    X_test  = pd.read_csv(os.path.join(output_path_3, f'X_test_{sampleRate}.csv'))
+    X_train = pd.read_csv(os.path.join(input_path_4, f'X_train_{sampleRate}{classifier_name}.csv'))
+    X_test  = pd.read_csv(os.path.join(input_path_4, f'X_test_{sampleRate}{classifier_name}.csv'))
     feature_names = X_train.columns.to_list()
     
     # ---- Step 3: Order features by ReliefF weight ----
@@ -809,8 +900,8 @@ def stage_4():
     X_test_sorted  = X_test.iloc[:, sorted_indices]
     
     # Save reordered datasets
-    X_train_sorted.to_csv(os.path.join(output_path_4, f'{names[base_index]}_X_train_weight_ordered_{sampleRate}.csv'), index=False, header=True)
-    X_test_sorted.to_csv(os.path.join(output_path_4, f'{names[base_index]}_X_test_weight_ordered_{sampleRate}.csv'), index=False, header=True)
+    X_train_sorted.to_csv(os.path.join(output_path_4, f'{names[base_index]}_X_train_weight_ordered_{sampleRate}{classifier_name}.csv'), index=False, header=True)
+    X_test_sorted.to_csv(os.path.join(output_path_4, f'{names[base_index]}_X_test_weight_ordered_{sampleRate}{classifier_name}.csv'), index=False, header=True)
     
     # ---- Step 4: Top-10 features ----
     top10_indices = sorted_indices[:10]
@@ -841,11 +932,11 @@ def stage_4():
     ax.set_ylabel('Features')
     ax.set_title(f'{names[base_index]} ReliefF Feature Importance')
     plt.tight_layout()
-    plt.savefig(os.path.join(plot(output_path_4), f'{names[base_index]}_relieff_weights_plot_{sampleRate}.png'), dpi=600)
+    plt.savefig(os.path.join(plot(output_path_4), f'{names[base_index]}_relieff_weights_plot_{sampleRate}{classifier_name}.png'), dpi=600)
     plt.show()
     
     # ---- Step 6: ESP32 Feature Computation Time vs ReliefF Weights ----
-    times_file = os.path.join(input_path_0, f'feats_computation_times_{sampleRate}.csv')
+    times_file = os.path.join(time_path, f'feats_computation_times_{sampleRate}.csv')
     if os.path.isfile(times_file):
         times = pd.read_csv(times_file, header=None).iloc[0].to_numpy()
         times = np.log1p(times)   # safer than log
@@ -905,7 +996,7 @@ def stage_4():
         ax.set_ylabel('Features (sorted by Custom Score)')
         ax.set_title(f'{names[base_index]} Feature Trade-off: Importance vs ESP32 Computation Time')
         
-        plot_name2 = [f'Python_Feats_CustomScore_{sampleRate}.png', f'Matlab_Feats_CustomScore_{sampleRate}.png']
+        plot_name2 = [f'Python_Feats_CustomScore_{sampleRate}{classifier_name}.png', f'Matlab_Feats_CustomScore_{sampleRate}{classifier_name}.png']
         plot_path2 = os.path.join(plot(output_path_4), plot_name2[base_index])
         plt.tight_layout()
         plt.savefig(plot_path2, dpi=600)
@@ -919,8 +1010,8 @@ def stage_4():
         X_train_custom_sorted = X_train.iloc[:, custom_sorted_indices]
         X_test_custom_sorted  = X_test.iloc[:, custom_sorted_indices]
         
-        out_file_all_train_custom = os.path.join(output_path_4, f'{names[base_index]}_X_train_custom_reordered_{sampleRate}.csv')
-        out_file_all_test_custom  = os.path.join(output_path_4, f'{names[base_index]}_X_test_custom_reordered_{sampleRate}.csv')
+        out_file_all_train_custom = os.path.join(output_path_4, f'{names[base_index]}_X_train_custom_reordered_{sampleRate}{classifier_name}.csv')
+        out_file_all_test_custom  = os.path.join(output_path_4, f'{names[base_index]}_X_test_custom_reordered_{sampleRate}{classifier_name}.csv')
         
         X_train_custom_sorted.to_csv(out_file_all_train_custom, index=False, header=True)
         X_test_custom_sorted.to_csv(out_file_all_test_custom, index=False, header=True)
@@ -933,18 +1024,19 @@ def stage_4():
     return 
 
 # ---------------- Data Process 5: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
-def stage_5():
+def stage_5(cl):
     print('\n======= Data Process: 5 =======\n')
     # ---------------- Import Libraries ------------------
     import pandas as pd
     import numpy as np
     import matplotlib.pyplot as plt
-    import polars as pl
-    from sklearn.model_selection import train_test_split, TimeSeriesSplit, cross_validate
-    from scipy.stats import mode, randint, uniform
-    import m2cgen as m2c
+    from sklearn.model_selection import TimeSeriesSplit
+    from scipy.stats import randint
+    from micromlgen import port
+    #import m2cgen as m2c
     # ----------------------------------------------------
-    
+
+
     def loadData(paths, index, input_file):
         r'''
         Load dataset X, y, feature names, and tag based on index from input_file.
@@ -972,7 +1064,7 @@ def stage_5():
         X_file, y_file, Data_tag = row['X_file'], row['y_file'], row['Data_tag']
     
         # First 3 datasets are from Stage 4, rest from Stage 6
-        base_path = paths[0] if index < 2 else paths[1]
+        base_path = paths[0] if index < 3 else paths[1]
     
         X_path = os.path.join(base_path, X_file)
         y_path = os.path.join(paths[0], y_file)
@@ -993,34 +1085,282 @@ def stage_5():
     
         return X, y, fNames, Data_tag
     
-    
-    
-    def classifiers(cl):
-        
-        if cl == 0: # Decision Tree 
-            from sklearn.tree import DecisionTreeClassifier  # Import Decision Tree Classifier
-            return DecisionTreeClassifier(), 'DecisionTree'
+    def capture_output_and_plot(classifier_name, accuracy, Data_tag, 
+                                classifier, X_test, y_test):
+        import io
+        from contextlib import redirect_stdout  
+        accuracy = str(round(accuracy * 100, 2))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            # Plot confusion matrix image as an example 
+            # Original class names from filenames
+            original_class_names = [filename.replace('_feat.csv', '') 
+                                    for filename in files]
             
-        elif cl == 1: # Random Forest 
-            from sklearn.ensemble import RandomForestClassifier
-            return RandomForestClassifier(), 'RandomForest'
+            # Generate numeric labels for display
+            class_names = [f'Class {i}' for i in range(len(original_class_names))]
+            
+            # Create a mapping legend
+            legend_text = '\n'.join([f'{class_names[i]}: {original_class_names[i]}' 
+                                     for i in range(len(class_names))])
+            
+            labels = np.unique(y_test)  # integers that appear in y_test
+            fig, ax = plt.subplots(figsize=(10, 8))  # wider & taller
+            disp = ConfusionMatrixDisplay.from_estimator(
+                classifier,
+                X_test,
+                y_test,
+                labels=labels,                                      
+                display_labels=[f'Class {i}' for i in labels],       
+                normalize='true',
+                cmap=plt.cm.Blues,
+                xticks_rotation=90,
+                values_format='.1%',  
+                ax=ax            
+                )
+            
+            # Remove scientific notation    
+            plt.gca().set_xticklabels(class_names, rotation=90)
+            plt.gca().set_yticklabels(class_names)
+            
+            # Add the legend as a textbox
+            plt.gcf().text(1.02, 
+                           0.5, 
+                           legend_text, 
+                           fontsize=12, 
+                           va='center', 
+                           bbox=dict(facecolor='white', edgecolor='black')
+                           )
+           
+            # Title
+            plt.title(f'{classifier_name} Confusion Matrix \n' + Data_tag 
+                       + accuracy + '%', fontsize=16)
+            
+            # Improve readability
+            plt.tick_params(axis='x', labelsize=10)
+            plt.tick_params(axis='y', labelsize=10)
+            
+            # Optional: Bold larger numbers or set font size
+            for text in disp.ax_.texts:
+                text.set_fontsize(6)  # Increase for better visibility (try 10–12 if need 
+            # Save and show
+            plt.savefig(f'{classifier_name}_image.png', dpi=600, bbox_inches='tight')
+            plt.tight_layout()
+            plt.show()
+            plt.close()
     
+        return buf.getvalue(), '{classifier_name}_image.png'
+    # ========================================================================
+    from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
+                                 roc_auc_score, confusion_matrix, ConfusionMatrixDisplay, classification_report, 
+                                 roc_curve, auc, RocCurveDisplay, make_scorer, root_mean_squared_error)
+    if auto == 1:
+        classifier_name1 = 'ALL'
+    else:
+        classifier_name1 = classifier_name
+    
+    folder_path = f'./3_FEATS/{sampleRate}_Hz_sampling/{classifier_name1}/'
+    files = [
+        f'x_1_0mv_{sampleRate}.csv',f'y_1_0mv_{sampleRate}.csv',f'z_1_0mv_{sampleRate}.csv',
+        f'x_2_r_mv_{sampleRate}.csv',f'y_2_r_mv_{sampleRate}.csv', f'z_2_r_mv_{sampleRate}.csv',
+        f'x_3_1st_p_min_{sampleRate}.csv', f'y_3_1st_p_min_{sampleRate}.csv', f'z_3_1st_p_min_{sampleRate}.csv',
+        f'x_4_2st_p_min_{sampleRate}.csv', f'y_4_2st_p_min_{sampleRate}.csv', f'z_4_2st_p_min_{sampleRate}.csv',
+        f'x_5_3st_p_min_w_ad_{sampleRate}.csv', f'y_5_3st_p_min_w_ad_{sampleRate}.csv',f'z_5_3st_p_min_w_ad_{sampleRate}.csv'
+    ]
+    
+    paths = [f'./4_FEATS_COMBINED/{sampleRate}_Hz_sampling/{classifier_name1}/',f'./5_FEATS_SELECTION/{sampleRate}_Hz_sampling/{classifier_name1}/']
+    
+    input_file_train = pd.DataFrame([
+        [f"all_raw_train_{sampleRate}{classifier_name1}.csv", f"y_all_raw_train_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
+        [f"all_norm_train_{sampleRate}{classifier_name1}.csv", f"y_all_norm_train_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
+        [f"X_train_{sampleRate}{classifier_name1}.csv", f"y_train_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
+        [f"Matlab_X_train_weight_ordered_{sampleRate}{classifier_name1}.csv", f"y_train_{sampleRate}{classifier_name1}.csv", "WEIGHT BASED FEATURES "],
+        [f"Matlab_X_train_custom_reordered_{sampleRate}{classifier_name1}.csv",f"y_train_{sampleRate}{classifier_name1}.csv", "SCORE BASED FEATURES "]
+            ], columns=['X_file', 'y_file', 'Data_tag'])
+        
+    input_file_test = pd.DataFrame([
+        [f"all_raw_test_{sampleRate}{classifier_name1}.csv", f"y_all_test_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
+        [f"all_norm_test_{sampleRate}{classifier_name1}.csv", f"y_all_norm_test_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
+        [f"X_test_{sampleRate}{classifier_name1}.csv", f"y_test_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
+        [f"Matlab_X_test_weight_ordered_{sampleRate}{classifier_name1}.csv", f"y_test_{sampleRate}{classifier_name1}.csv", "WEIGHT BASED FEATURES "],
+        [f"Matlab_X_test_custom_reordered_{sampleRate}{classifier_name1}.csv", f"y_test_{sampleRate}{classifier_name1}.csv", "SCORE BASED FEATURES "]
+            ], columns=['X_file', 'y_file', 'Data_tag'])
+    
+    
+        
+    X_train, y_train, fNames, Data_tag = loadData(paths, file_index, input_file_train)
+    X_train = X_train.iloc[:, :10].copy()
+    # fNames = pd.DataFrame(row[:10] for row in fNames)
+    X_test, y_test, fNs, Data_tag = loadData(paths, file_index, input_file_test)
+    X_test = X_test.iloc[:, :10].copy()
+    
+    
+    # Parameter distributions for RandomizedSearchCV
+    param_dists = {
+
+        'DT': {
+            'max_depth': randint(1, 50),
+            'min_samples_split': randint(2, 10)
+        },
+        'RF': {
+            'n_estimators': randint(1, 200),
+            'max_depth': randint(1, 50),
+            'min_samples_split': randint(2, 10)
+        }
+    }
+    from sklearn.model_selection import  RandomizedSearchCV
+    ts_cv = TimeSeriesSplit(n_splits=5) 
+
+    search = RandomizedSearchCV(classifier, 
+                                param_dists[classifier_name], 
+                                n_iter=10000, 
+                                cv=ts_cv, 
+                                n_jobs=-1, 
+                                scoring='accuracy', 
+                                random_state=42)
+    
+    # Fit and get results
+    search.fit(X_train, y_train)
+    results = pd.DataFrame(search.cv_results_)
+    best_params = search.best_params_
+    best_cv_score = search.best_score_
+    
+    # Test set accuracy
+    best_model = search.best_estimator_
+    y_pred = best_model.predict(X_test)
+    test_score = accuracy_score(y_test, y_pred)
+    
+    y_pred = best_model.predict(X_train)
+    train_score = accuracy_score(y_train, y_pred)
+    summary = []
+    
+    # Store for summary
+    summary.append({
+        'Classifier': classifier_name,
+        'CV Accuracy': round(best_cv_score, 4),
+        'Train Accuracy': round(train_score, 4),
+        'Test Accuracy': round(test_score, 4),
+        'Best Params': best_params,
+    })
+    # Summary
+    print('\n Summary:')
+    for s in summary:
+        print(f'\n {s['Classifier']}')
+        print(f'   CV Accuracy  : {s['CV Accuracy']}')
+        print(f'   Train : {s['Train Accuracy']}')
+        print(f'   Test Accuracy: {s['Test Accuracy']}')
+        print(f'   Best Params  : {s['Best Params']}')
+
+    if pl == 1:
+        classification_text, image_path = capture_output_and_plot(classifier_name,
+                                                                      test_score, 
+                                                                          Data_tag,  
+                                                                          best_model, 
+                                                                          X_test,  
+                                                                          y_test)  
+        # Export model to c code
+        model_code = port(best_model)
+        
+        # save_dir = paths[1]
+        # Windows path (use raw string or double backslashes)
+        save_dir = '../' 
+        
+        # Ensure path exists (optional safety check)
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # Full path to save header file
+        save_path = os.path.join(save_dir, f'{classifier_name}{sampleRate}W{window}.h')
+        
+        # Write the file
+        with open(save_path, 'w', encoding='utf-8') as f:
+            f.write(model_code)   
+                                
+    return test_score
     
 # ============================= Auto Runner ===================================
+    
 if auto == 0: 
-    
-    if data_process == 0: stage_0()
-    elif data_process == 1: stage_1()
-    elif data_process == 2: stage_2()
-    elif data_process == 3: stage_3()
-    elif data_process == 4: stage_4()
-    elif data_process == 5: stage_5()
+    # ----------------------------- Plotting Option ---------------------------
+    pl = 1 # 0: no plots; 1: plots
+    file_index = 2
+    for cl in range(n_classifiers):
+        window = windows[cl]
+        window_size = int(round(window * sampleRate))
+        print(f'Window size set to {window_size} rows for sample rate {sampleRate} Hz and window time {window} sec.')
+        classifier, classifier_name = get_classifier(cl)
+        if stage == 0: stage_0()
+        elif stage == 1: stage_1()
+        elif stage == 2: stage_2()
+        elif stage == 3: stage_3()
+        elif stage == 4: stage_4()
+        elif stage == 5:     
+            test_score = stage_5(cl)
+            print(f"  For {cl}: {test_score*100:.2f}%")
 
-    
+
 elif auto == 1:
-    stage_0()
-    stage_1()
-    stage_2()
-    stage_3()       
-    stage_4()
-    #stage_5()
+    file_index = 2
+    if window_search == 0:
+        pl = 1 # 0: no plots; 1: plots
+        for cl in range(n_classifiers):
+            window = windows[cl]
+            window_size = int(round(window * sampleRate))
+            print(f'Window size set to {window_size} rows for sample rate {sampleRate} Hz and window time {window} sec.')
+            classifier, classifier_name = get_classifier(cl)
+            stage_0()
+            stage_1()
+            stage_2()
+            stage_3()
+            stage_4()
+            test_score = stage_5(cl)
+            print(f"  For {cl}: {test_score*100:.2f}%")
+    else:
+        best_windows = [None] * n_classifiers
+        best_scores = [-1.0] * n_classifiers
+    
+        pl = 0  # disable plotting during search
+    
+        # loop over candidate windows
+        for w in range (0, len(candidate_windows)):
+            window = candidate_windows[w]
+            window_size = int(round(window * sampleRate))
+            print(f"\n=== Running pipeline for window={window}s ({window_size} rows) ===")
+            
+            # run all stages once per window
+            classifier_name = 'ALL'
+            stage_0()
+            stage_1()
+            stage_2()
+            stage_3()
+            stage_4()
+            for cl in range(n_classifiers):
+                classifier, classifier_name = get_classifier(cl)
+                test_score = stage_5(cl)            
+                print(f"   {classifier_name} accuracy: {test_score*100:.2f}%")
+        
+                # check if best for this classifier
+                if test_score > best_scores[cl]:
+                    best_scores[cl] = test_score
+                    best_windows[cl] = window
+    
+        print("\n================= Search finished =================")
+        for cl in range(n_classifiers):
+            clf_name = get_classifier(cl)[1]
+            print(f"Best window for {clf_name}: {best_windows[cl]}s "
+                  f"(accuracy={best_scores[cl]*100:.2f}%)")
+    
+        # re-run pipeline using each best window
+        pl = 1  # enable plotting
+        for cl in range(n_classifiers):
+            window = best_windows[cl]
+            window_size = int(round(window * sampleRate))
+            print(f"\nRe-running for {get_classifier(cl)[1]} with best window={window}s")
+            classifier, classifier_name = get_classifier(cl)
+            stage_0()
+            stage_1()
+            stage_2()
+            stage_3()
+            stage_4()
+            test_score= stage_5(cl)
+            print(f"Final {clf_name} accuracy: {test_score*100:.2f}%")
+
