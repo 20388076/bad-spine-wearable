@@ -39,6 +39,10 @@ class FFT_real {
             }
             real[k] = sum_real;
             imag[k] = sum_imag;
+            // yield occasionally so the RTOS idle/watchdog can run — adjust modulus if needed
+            if ((k & 0x3F) == 0) { // every 64 iterations
+                taskYIELD();
+            }
         }
     }
 
@@ -46,6 +50,10 @@ class FFT_real {
     computeMagnitude() {
         for (int i = 0; i < N; ++i) {
             magnitude[i] = sqrt(real[i] * real[i] + imag[i] * imag[i]);
+            // yield occasionally to avoid long blocking
+            if ((i & 0x3F) == 0) { // every 64 iterations
+                taskYIELD();
+            }
         }
     }
 

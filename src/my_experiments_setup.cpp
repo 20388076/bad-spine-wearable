@@ -70,7 +70,8 @@ Task1code(void* pvParameters) {
                       a.acceleration.z, g.gyro.x, g.gyro.y, g.gyro.z);
         t = millis() - start; // Calculate measurements computation time
         vTaskDelay(pdMS_TO_TICKS(
-            samplePeriod - t)); // Sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
+            samplePeriod
+            - t)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
     }
 }
 

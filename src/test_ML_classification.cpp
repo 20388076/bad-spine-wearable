@@ -11,6 +11,7 @@
 #include <Wire.h>              // I2C communication (used by MPU6050)
 #include <algorithm>           // Useful for math/array operations
 #include <iostream>            // Input/output (mainly for debugging with Serial)
+#include "esp_task_wdt.h"      // Watchdog timer to reset if tasks hang but
 #include "fft.h"               // Fast Fourier Transform Custom library
 #include "freertos/FreeRTOS.h" // FreeRTOS real-time operating system
 #include "freertos/task.h"     // FreeRTOS task handling (multithreading)
@@ -34,7 +35,7 @@ TaskFunction_t Task1code1, Task1code2;
 #define USE_RAW_DATA 0 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
 
 #if USE_RAW_DATA
-#include "Best_RandomForest.h"
+#include "RF9.71W120.h"
 Eloquent::ML::Port::RandomForest model;
 #else
 #include "DT9.71W120.h" //"Best_DecisionTree.h"
@@ -113,7 +114,7 @@ int last_position = initial_position; // Last position of servo motor
 int step;                             // Factor to decrease position by degrees per miniute
 
 /* Sampling and Features Variables configuration */
-const long MAX_RESULTS = 1846;
+const long MAX_RESULTS = 30;
 float y_test[MAX_RESULTS]; // Array to hold test values
 
 // Initialize all elements with choice_num
@@ -379,6 +380,98 @@ compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& 
     theta_z = acos(cz);
 }
 
+float
+computeFeature(int featureId) {
+    switch (featureId) {
+        case 1: return vector_magnitude(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+        case 2: return vector_magnitude(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+        case 3: return cubic_prod_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+        case 4: return cubic_prod_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+        case 5: return derivative_max(acc_x_data, WINDOW, sampleRate);
+        case 6: return derivative_max(acc_y_data, WINDOW, sampleRate);
+        case 7: return derivative_max(acc_z_data, WINDOW, sampleRate);
+        case 8: return derivative_max(gyro_x_data, WINDOW, sampleRate);
+        case 9: return derivative_max(gyro_y_data, WINDOW, sampleRate);
+        case 10: return derivative_max(gyro_z_data, WINDOW, sampleRate);
+        case 11:
+        case 12:
+        case 13: {
+            float tx, ty, tz;
+            compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, tx, ty, tz);
+            if (featureId == 11) {
+                return tx;
+            }
+            if (featureId == 12) {
+                return ty;
+            }
+            return tz;
+        }
+        case 14: return window_mean(acc_x_data, WINDOW);
+        case 15: return window_max(acc_x_data, WINDOW);
+        case 16: return window_min(acc_x_data, WINDOW);
+        case 17: return window_mean(acc_y_data, WINDOW);
+        case 18: return window_max(acc_y_data, WINDOW);
+        case 19: return window_min(acc_y_data, WINDOW);
+        case 20: return window_mean(acc_z_data, WINDOW);
+        case 21: return window_max(acc_z_data, WINDOW);
+        case 22: return window_min(acc_z_data, WINDOW);
+        case 23: return window_mean(gyro_x_data, WINDOW);
+        case 24: return window_max(gyro_x_data, WINDOW);
+        case 25: return window_min(gyro_x_data, WINDOW);
+        case 26: return window_mean(gyro_y_data, WINDOW);
+        case 27: return window_max(gyro_y_data, WINDOW);
+        case 28: return window_min(gyro_y_data, WINDOW);
+        case 29: return window_mean(gyro_z_data, WINDOW);
+        case 30: return window_max(gyro_z_data, WINDOW);
+        case 31: return window_min(gyro_z_data, WINDOW);
+        case 32: return compute_sma_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+        case 33: return compute_sma_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+        case 34: return compute_rms(acc_x_data, WINDOW);
+        case 35: return compute_rms(acc_y_data, WINDOW);
+        case 36: return compute_rms(acc_z_data, WINDOW);
+        case 37: return compute_rms(gyro_x_data, WINDOW);
+        case 38: return compute_rms(gyro_y_data, WINDOW);
+        case 39: return compute_rms(gyro_z_data, WINDOW);
+        case 40: return compute_mad(acc_x_data, WINDOW);
+        case 41: return compute_mad(acc_y_data, WINDOW);
+        case 42: return compute_mad(acc_z_data, WINDOW);
+        case 43: return compute_mad(gyro_x_data, WINDOW);
+        case 44: return compute_mad(gyro_y_data, WINDOW);
+        case 45: return compute_mad(gyro_z_data, WINDOW);
+        case 46: return compute_var(acc_x_data, WINDOW);
+        case 47: return compute_var(acc_y_data, WINDOW);
+        case 48: return compute_var(acc_z_data, WINDOW);
+        case 49: return compute_var(gyro_x_data, WINDOW);
+        case 50: return compute_var(gyro_y_data, WINDOW);
+        case 51: return compute_var(gyro_z_data, WINDOW);
+        case 52: return compute_std(acc_x_data, WINDOW);
+        case 53: return compute_std(acc_y_data, WINDOW);
+        case 54: return compute_std(acc_z_data, WINDOW);
+        case 55: return compute_std(gyro_x_data, WINDOW);
+        case 56: return compute_std(gyro_y_data, WINDOW);
+        case 57: return compute_std(gyro_z_data, WINDOW);
+        case 58: return compute_iqr(acc_x_data, WINDOW);
+        case 59: return compute_iqr(acc_y_data, WINDOW);
+        case 60: return compute_iqr(acc_z_data, WINDOW);
+        case 61: return compute_iqr(gyro_x_data, WINDOW);
+        case 62: return compute_iqr(gyro_y_data, WINDOW);
+        case 63: return compute_iqr(gyro_z_data, WINDOW);
+        case 64: compute_FFT_real(acc_x_data, fft_real, WINDOW); return fft_real[1];
+        case 65: compute_FFT_real(acc_y_data, fft_real, WINDOW); return fft_real[1];
+        case 66: compute_FFT_real(acc_z_data, fft_real, WINDOW); return fft_real[1];
+        case 67: compute_FFT_real(gyro_x_data, fft_real, WINDOW); return fft_real[1];
+        case 68: compute_FFT_real(gyro_y_data, fft_real, WINDOW); return fft_real[1];
+        case 69: compute_FFT_real(gyro_z_data, fft_real, WINDOW); return fft_real[1];
+        case 70: compute_FFT_mag(acc_x_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 71: compute_FFT_mag(acc_y_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 72: compute_FFT_mag(acc_z_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 73: compute_FFT_mag(gyro_x_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 74: compute_FFT_mag(gyro_y_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 75: compute_FFT_mag(gyro_z_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        default: return 0.0f;
+    }
+}
+
 // Task 1: Read MPU6050 data, compute features, and make predictions
 
 void
@@ -405,163 +498,23 @@ Task1code(void* pvParameters) {
             if (sample_index < WINDOW - 1) {
                 t1 = millis() - start;
                 //Serial.printf("\nComputation time1: %.2f ms\n", t1);
-                vTaskDelay(pdMS_TO_TICKS(samplePeriod - t1));
+                vTaskDelay(pdMS_TO_TICKS(
+                    samplePeriod
+                    - t1)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
 
             } else if (sample_index == WINDOW - 1) {
                 // float output_matrix[75]; // Initialize output matrix
+                // --- Start feature computations ---
+                UBaseType_t freeStack = uxTaskGetStackHighWaterMark(NULL);
+                Serial.printf("Task1 stack remaining: %u words (%u bytes)\n", freeStack, freeStack * 4);
 
-                // --- f1 ---
-                float f1 = vector_magnitude(acc_x_data, acc_y_data, acc_z_data, WINDOW);
-                // --- f2 ---
-                float f2 = vector_magnitude(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
-                // --- f3 ---
-                float f3 = cubic_prod_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
-                // --- f4 ---
-                float f4 = cubic_prod_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
-                // --- f5 ---
-                float f5 = derivative_max(acc_x_data, WINDOW, sampleRate);
-                // --- f6 ---
-                float f6 = derivative_max(acc_y_data, WINDOW, sampleRate);
-                // --- f7 ---
-                float f7 = derivative_max(acc_z_data, WINDOW, sampleRate);
-                // --- f8 ---
-                float f8 = derivative_max(gyro_x_data, WINDOW, sampleRate);
-                // --- f9 ---
-                float f9 = derivative_max(gyro_y_data, WINDOW, sampleRate);
-                // --- f10 ---
-                float f10 = derivative_max(gyro_z_data, WINDOW, sampleRate);
-                /*
-                // --- f11–f13 (thetas already computed) ---
-                compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, theta_x, theta_y, theta_z);
-                float f11 = theta_x;
-                float f12 = theta_y;
-                float f13 = theta_z;
-                // --- f14 ---
-                float f14 = window_mean(acc_x_data, WINDOW);
-                // --- f15 ---
-                float f15 = window_max(acc_x_data, WINDOW);
-                // --- f16 ---
-                float f16 = window_min(acc_x_data, WINDOW);
-                // --- f17 ---
-                float f17 = window_mean(acc_y_data, WINDOW);
-                // --- f18 ---
-                float f18 = window_max(acc_y_data, WINDOW);
-                // --- f19 ---
-                float f19 = window_min(acc_y_data, WINDOW);
-                // --- f20 ---
-                float f20 = window_mean(acc_z_data, WINDOW);
-                // --- f21 ---
-                float f21 = window_max(acc_z_data, WINDOW);
-                // --- f22 ---
-                float f22 = window_min(acc_z_data, WINDOW);
-                // --- f23 ---
-                float f23 = window_mean(gyro_x_data, WINDOW);
-                // --- f24 ---
-                float f24 = window_max(gyro_x_data, WINDOW);
-                // --- f25 ---
-                float f25 = window_min(gyro_x_data, WINDOW);
-                // --- f26 ---
-                float f26 = window_mean(gyro_y_data, WINDOW);
-                // --- f27 ---
-                float f27 = window_max(gyro_y_data, WINDOW);
-                // --- f28 ---
-                float f28 = window_min(gyro_y_data, WINDOW);
-                // --- f29 ---
-                float f29 = window_mean(gyro_z_data, WINDOW);
-                // --- f30 ---
-                float f30 = window_max(gyro_z_data, WINDOW);
-                // --- f31 ---
-                float f31 = window_min(gyro_z_data, WINDOW);
-                // --- f32 ---
-                float f32 = compute_sma_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
-                // --- f33 ---
-                float f33 = compute_sma_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
-                // --- f34 ---
-                float f34 = compute_rms(acc_x_data, WINDOW);
-                // --- f35 ---
-                float f35 = compute_rms(acc_y_data, WINDOW);
-                // --- f36 ---
-                float f36 = compute_rms(acc_z_data, WINDOW);
-                // --- f37 ---
-                float f37 = compute_rms(gyro_x_data, WINDOW);
-                // --- f38 ---
-                float f38 = compute_rms(gyro_y_data, WINDOW);
-                // --- f39 ---
-                float f39 = compute_rms(gyro_z_data, WINDOW);
-                // --- f40 ---
-                float f40 = compute_mad(acc_x_data, WINDOW);
-                // --- f41 ---
-                float f41 = compute_mad(acc_y_data, WINDOW);
-                // --- f42 ---
-                float f42 = compute_mad(acc_z_data, WINDOW);
-                // --- f43 ---
-                float f43 = compute_mad(gyro_x_data, WINDOW);
-                // --- f44 ---
-                float f44 = compute_mad(gyro_y_data, WINDOW);
-                // --- f45 ---
-                float f45 = compute_mad(gyro_z_data, WINDOW);
-                // --- f46 ---
-                float f46 = compute_var(acc_x_data, WINDOW);
-                // --- f47 ---
-                float f47 = compute_var(acc_y_data, WINDOW);
-                // --- f48 ---
-                float f48 = compute_var(acc_z_data, WINDOW);
-                // --- f49 ---
-                float f49 = compute_var(gyro_x_data, WINDOW);
-                // --- f50 ---
-                float f50 = compute_var(gyro_y_data, WINDOW);
-                // --- f51 ---
-                float f51 = compute_var(gyro_z_data, WINDOW);
-                float f52 = compute_std(acc_x_data, WINDOW);
-                float f53 = compute_std(acc_y_data, WINDOW);
-                float f54 = compute_std(acc_z_data, WINDOW);
-                float f55 = compute_std(gyro_x_data, WINDOW);
-                float f56 = compute_std(gyro_y_data, WINDOW);
-                float f57 = compute_std(gyro_z_data, WINDOW);
-                float f58 = compute_iqr(acc_x_data, WINDOW);
-                float f59 = compute_iqr(acc_y_data, WINDOW);
-                float f60 = compute_iqr(acc_z_data, WINDOW);
-                float f61 = compute_iqr(gyro_x_data, WINDOW);
-                float f62 = compute_iqr(gyro_y_data, WINDOW);
-                float f63 = compute_iqr(gyro_z_data, WINDOW);
-                // --- f64 ---
-                compute_FFT_real(acc_x_data, fft_real, WINDOW);
-                float f64 = fft_real[1]; // first non-DC bin
-                // --- f65 ---
-                compute_FFT_real(acc_y_data, fft_real, WINDOW);
-                float f65 = fft_real[1];
-                // --- f66 ---
-                compute_FFT_real(acc_z_data, fft_real, WINDOW);
-                float f66 = fft_real[1];
-                // --- f67 ---
-                compute_FFT_real(gyro_x_data, fft_real, WINDOW);
-                float f67 = fft_real[1];
-                // --- f68 ---
-                compute_FFT_real(gyro_y_data, fft_real, WINDOW);
-                float f68 = fft_real[1];
-                // --- f69 ---
-                compute_FFT_real(gyro_z_data, fft_real, WINDOW);
-                float f69 = fft_real[1];
-                // --- f70 ---
-                compute_FFT_mag(acc_x_data, fft_mag, WINDOW);
-                float f70 = compute_fft_energy(fft_mag, WINDOW);
-                // --- f71 ---
-                compute_FFT_mag(acc_y_data, fft_mag, WINDOW);
-                float f71 = compute_fft_energy(fft_mag, WINDOW);
-                // --- f72 ---
-                compute_FFT_mag(acc_z_data, fft_mag, WINDOW);
-                float f72 = compute_fft_energy(fft_mag, WINDOW);
-                // --- f73 ---
-                compute_FFT_mag(gyro_x_data, fft_mag, WINDOW);
-                float f73 = compute_fft_energy(fft_mag, WINDOW);
-                // --- f74 ---
-                compute_FFT_mag(gyro_y_data, fft_mag, WINDOW);
-                float f74 = compute_fft_energy(fft_mag, WINDOW);
-                // --- f75 ---
-                compute_FFT_mag(gyro_z_data, fft_mag, WINDOW);
-                float f75 = compute_fft_energy(fft_mag, WINDOW);
-                */
-                float values[] = {f1, f2, f3, f4, f5, f6, f7, f8, f9, f10};
+                int selectedFeatures[] = {64, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+                int numFeatures = sizeof(selectedFeatures) / sizeof(selectedFeatures[0]);
+                float values[numFeatures];
+
+                for (int i = 0; i < numFeatures; i++) {
+                    values[i] = computeFeature(selectedFeatures[i]);
+                }
 
                 int predicted = model.predict(values);
 
@@ -571,10 +524,15 @@ Task1code(void* pvParameters) {
                 if (predicted == actual) {
                     correct++;
                 }
+
                 t2 = millis() - start;
                 Serial.printf("\nComputation time2: %.2f ms\n", t2);
                 iteration++;
-                vTaskDelay(pdMS_TO_TICKS((1000 * samplePeriod) - t2));
+                taskYIELD(); // let idle run
+                vTaskDelay(pdMS_TO_TICKS(1));
+                vTaskDelay(pdMS_TO_TICKS(
+                    (5 * samplePeriod)
+                    - t2)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
             }
         }
     }
@@ -649,6 +607,7 @@ Task2code(void* pvParameters) {
 void
 setup() {
     Serial.begin(115200);     // Start serial communication at 115200 baud rate
+    setCpuFrequencyMhz(240);  // Sets the CPU frequency to 240 MHz
     setChoiceNum();           // Set choice_num based on scenario and axis
     initializeTestArray();    // Initialize y_test array with choice_num
     myServo.attach(servoPin); // Attach servo to pin 25 or D2
@@ -708,22 +667,26 @@ setup() {
     // Create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
     xTaskCreatePinnedToCore(Task1code, /* Task function. */
                             "Task1",   /* name of task. */
-                            10000,     /* Stack size of task */
+                            20000,     /* Stack size of task */
                             NULL,      /* parameter of the task */
                             1,         /* priority of the task */
                             &Task1,    /* Task handle to keep track of created task */
                             0);        /* pin task to core 0 */
-    delay(500);
+    delay(100);
 
     // Create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
     xTaskCreatePinnedToCore(Task2code, /* Task function. */
                             "Task2",   /* name of task. */
-                            10000,     /* Stack size of task */
+                            20000,     /* Stack size of task */
                             NULL,      /* parameter of the task */
                             1,         /* priority of the task */
                             &Task2,    /* Task handle to keep track of created task */
                             1);        /* pin task to core 1 */
-    delay(500);
+    // Disable watchdog on the current task (core 0 Task1)
+    disableCore0WDT();
+    //disableCore1WDT();
+    esp_task_wdt_deinit(); // fully stop WDT globally (debug only!)
+    delay(100);
 }
 
 void

@@ -1,7 +1,7 @@
 #include <Arduino.h>
-#include <cmath>   // sqrt, acos
 #include <algorithm> // std::max, std::min
-#include "fft.h" // your custom FFT implementation
+#include <cmath>     // sqrt, acos
+#include "fft.h"     // your custom FFT implementation
 
 // ===========================================
 // Constants
@@ -664,7 +664,7 @@ setup() {
     // --- f66 ---
     start = micros();
     compute_FFT_real(acc_z_data, fft_real_acc_z, WINDOW);
-    float f66 = fft_real_acc_z[1]; //  float f66 = fft_real_acc_z[8]; // first non-DC bin
+    float f66 = fft_real_acc_z[8]; //  float f66 = fft_real_acc_z[8]; // first non-DC bin
     float t66 = micros() - start;
 
     // --- f67 ---

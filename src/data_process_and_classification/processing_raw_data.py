@@ -90,13 +90,16 @@ auto = 1
 # 4: a) X_data_train, y_data_train -> ReliefF selected features or only 
 #    b) Plotting the weight order best features and combine the ESP32 computation time.
 
-stage = 2
+stage = 5
 
 # ----------------------------- Matlab Option for ReleifF ---------------------
 matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF   
 # ----------------------------- Window Size -----------------------------------
 # Define window in sec for data trimming to fit window size and window-based features per classifier
-windows = [120,120] # sec  <-- Change this table to set time window per classifier
+windows = [120,120] # sec  IF window_search = 0 <-- Change this table to set time window per classifier
+# ----------------------------- Window Search Value -----------------------------------
+window_search = 1 # Set 1 to search for the best time window from a list of time window named candidate_windows
+candidate_windows = [0.8,1,2,3,5,8,10,20,30,50,80,100,120,130,150,] # in sec (800ms - 2.5min)
 # ----------------------------- Sample Rate Dataset ---------------------------
 # Available Datasets
 # 1) 9.71 Hz
@@ -114,10 +117,8 @@ def get_classifier(cl):
     
 # if you add more classifiers change this value based on the overall number of classifiers
 n_classifiers = 2  # DecisionTree, RandomForest
+model_create = 0
 
-# ----------------------------- Window Search Value -----------------------------------
-window_search = 0 # Set 1 to search for the best time window from a list of time window named candidate_windows
-candidate_windows = [0.8,1,2,3,5,8,10,20,30,50,80,100,120,130,150] # in sec (800ms - 2.5min)
 # ----------------------------- File Configuration ----------------------------
 
 def get_paths(stage, sampleRate, classifier_name):
@@ -176,7 +177,7 @@ def get_paths(stage, sampleRate, classifier_name):
 # **************** Stage Functions *********************
 # ---------------- Data Process 0: for cleaning raw data ----------------
 def stage_0():
-    print('\n ======= Data Process: 0 =======\n')
+    print(f'\n ======= Data Process: 0 for {window}s =======\n')
     # ---------------- Import Libraries ------------------
     import os
     import pandas as pd
@@ -329,7 +330,7 @@ def stage_0():
 
 # ---------------- Data Process 1: Feature Extraction ----------------
 def stage_1():
-    print('\n======= Data Process: 1 =======\n')
+    print(f'\n======= Data Process: 1 for {window}s  =======\n')
     t1=tic()
     # ---------------- Import Libraries ------------------
     import os
@@ -486,7 +487,7 @@ def stage_1():
         
 # ---------------- Data Process 2: ----------------
 def stage_2():
-    print('\n======= Data Process: 2 =======\n')
+    print(f'\n======= Data Process: 2 for {window}s  =======\n')
     # ---------------- Import Libraries ------------------
     import os
     import pandas as pd
@@ -550,7 +551,7 @@ def stage_2():
     # Processing files loop for FFT replacement                                                                                                                                                                                                            
     for file_idx in range(len(input_file_2)): 
         df = pd.read_csv(input_path_2 + input_file_2[file_idx])
-        print('=' * 70 + '\n'+ f'Processing file: {input_file_2[file_idx]}\n'+'=' * 70)
+        #print('=' * 70 + '\n'+ f'Processing file: {input_file_2[file_idx]}\n'+'=' * 70)
         
         # Validate df has the FFT columns
         missing = [c for c in fft_columns if c not in df.columns]
@@ -579,7 +580,7 @@ def stage_2():
 
 # ---------------- Data Process 3: ----------------
 def stage_3():
-    print('\n======= Data Process: 3 =======\n')
+    print(f'\n======= Data Process: 3 for {window}s  =======\n')
     
     # ---------------- Import Libraries ------------------
     import os
@@ -650,7 +651,7 @@ def stage_3():
     norm_labels = []
     
     for file_idx, f in enumerate(feat_files):
-        print(f'Processing file: {f}')
+        #print(f'Processing file: {f}')
         df = pd.read_csv(os.path.join(input_path_3, f))
         
         # Explicit column selection for raw and normallize datasets
@@ -755,7 +756,7 @@ def stage_4():
     - Runs in Python by default.
     - If matlab=1, tries MATLAB Engine API, then Octave, else falls back to manual MATLAB Online.
     """
-    print('\n======= Data Process: 4 =======\n')
+    print(f'\n======= Data Process: 4 for {window}s  =======\n')
     # ---------------- Import Libraries ------------------
     import os
     import pandas as pd
@@ -1024,13 +1025,15 @@ def stage_4():
     return 
 
 # ---------------- Data Process 5: ReliefF Feature Selection Plotting and 10 best features, displaying for ESP32 use  ----------------
-def stage_5(cl):
-    print('\n======= Data Process: 5 =======\n')
+def stage_5(cl, file_index):
+    print(f'\n======= Data Process: 5 for {window}s  =======\n')
     # ---------------- Import Libraries ------------------
     import pandas as pd
     import numpy as np
     import matplotlib.pyplot as plt
     from sklearn.model_selection import TimeSeriesSplit
+    from sklearn.model_selection import  RandomizedSearchCV
+    import multiprocessing
     from scipy.stats import randint
     from micromlgen import port
     #import m2cgen as m2c
@@ -1171,17 +1174,17 @@ def stage_5(cl):
     paths = [f'./4_FEATS_COMBINED/{sampleRate}_Hz_sampling/{classifier_name1}/',f'./5_FEATS_SELECTION/{sampleRate}_Hz_sampling/{classifier_name1}/']
     
     input_file_train = pd.DataFrame([
+        [f"X_train_{sampleRate}{classifier_name1}.csv", f"y_train_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
         [f"all_raw_train_{sampleRate}{classifier_name1}.csv", f"y_all_raw_train_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
         [f"all_norm_train_{sampleRate}{classifier_name1}.csv", f"y_all_norm_train_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
-        [f"X_train_{sampleRate}{classifier_name1}.csv", f"y_train_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
         [f"Matlab_X_train_weight_ordered_{sampleRate}{classifier_name1}.csv", f"y_train_{sampleRate}{classifier_name1}.csv", "WEIGHT BASED FEATURES "],
         [f"Matlab_X_train_custom_reordered_{sampleRate}{classifier_name1}.csv",f"y_train_{sampleRate}{classifier_name1}.csv", "SCORE BASED FEATURES "]
             ], columns=['X_file', 'y_file', 'Data_tag'])
         
     input_file_test = pd.DataFrame([
-        [f"all_raw_test_{sampleRate}{classifier_name1}.csv", f"y_all_test_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
-        [f"all_norm_test_{sampleRate}{classifier_name1}.csv", f"y_all_norm_test_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
         [f"X_test_{sampleRate}{classifier_name1}.csv", f"y_test_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
+        [f"all_raw_test_{sampleRate}{classifier_name1}.csv", f"y_all_raw_test_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
+        [f"all_norm_test_{sampleRate}{classifier_name1}.csv", f"y_all_norm_test_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
         [f"Matlab_X_test_weight_ordered_{sampleRate}{classifier_name1}.csv", f"y_test_{sampleRate}{classifier_name1}.csv", "WEIGHT BASED FEATURES "],
         [f"Matlab_X_test_custom_reordered_{sampleRate}{classifier_name1}.csv", f"y_test_{sampleRate}{classifier_name1}.csv", "SCORE BASED FEATURES "]
             ], columns=['X_file', 'y_file', 'Data_tag'])
@@ -1189,10 +1192,11 @@ def stage_5(cl):
     
         
     X_train, y_train, fNames, Data_tag = loadData(paths, file_index, input_file_train)
-    X_train = X_train.iloc[:, :10].copy()
-    # fNames = pd.DataFrame(row[:10] for row in fNames)
     X_test, y_test, fNs, Data_tag = loadData(paths, file_index, input_file_test)
-    X_test = X_test.iloc[:, :10].copy()
+    if file_index == 3 or 4 :
+        X_train = X_train.iloc[:, :10].copy()
+        fNames = pd.DataFrame(row[:10] for row in fNames)
+        X_test = X_test.iloc[:, :10].copy()
     
     
     # Parameter distributions for RandomizedSearchCV
@@ -1208,14 +1212,14 @@ def stage_5(cl):
             'min_samples_split': randint(2, 10)
         }
     }
-    from sklearn.model_selection import  RandomizedSearchCV
+
     ts_cv = TimeSeriesSplit(n_splits=5) 
 
     search = RandomizedSearchCV(classifier, 
                                 param_dists[classifier_name], 
                                 n_iter=10000, 
                                 cv=ts_cv, 
-                                n_jobs=-1, 
+                                n_jobs=max(1, multiprocessing.cpu_count() - 1), 
                                 scoring='accuracy', 
                                 random_state=42)
     
@@ -1256,8 +1260,16 @@ def stage_5(cl):
                                                                       test_score, 
                                                                           Data_tag,  
                                                                           best_model, 
-                                                                          X_test,  
-                                                                          y_test)  
+                                                                          X_test,
+                                                                          y_test) 
+    if model_create == 1:                                                                      
+        import joblib
+
+        # Save the trained model
+        model_path = f"BEST{classifier_name}W{window}F{file_index}.pkl"
+        joblib.dump(best_model, model_path)
+        print(f"Saved best model to {model_path}")  
+                                                                 
         # Export model to c code
         model_code = port(best_model)
         
@@ -1275,14 +1287,17 @@ def stage_5(cl):
         with open(save_path, 'w', encoding='utf-8') as f:
             f.write(model_code)   
                                 
-    return test_score
+    return test_score, Data_tag
     
 # ============================= Auto Runner ===================================
+import pandas as pd
+import matplotlib.pyplot as plt
     
 if auto == 0: 
     # ----------------------------- Plotting Option ---------------------------
     pl = 1 # 0: no plots; 1: plots
-    file_index = 2
+    file_index = 0
+    model_create = 0  # enable classifier model create
     for cl in range(n_classifiers):
         window = windows[cl]
         window_size = int(round(window * sampleRate))
@@ -1294,73 +1309,178 @@ if auto == 0:
         elif stage == 3: stage_3()
         elif stage == 4: stage_4()
         elif stage == 5:     
-            test_score = stage_5(cl)
-            print(f"  For {cl}: {test_score*100:.2f}%")
+            test_score, Data_tag = stage_5(cl, file_index)
+            print(f"Final {Data_tag}: {classifier_name} accuracy: {test_score*100:.2f}%")
 
 
-elif auto == 1:
-    file_index = 2
-    if window_search == 0:
-        pl = 1 # 0: no plots; 1: plots
-        for cl in range(n_classifiers):
-            window = windows[cl]
-            window_size = int(round(window * sampleRate))
-            print(f'Window size set to {window_size} rows for sample rate {sampleRate} Hz and window time {window} sec.')
-            classifier, classifier_name = get_classifier(cl)
-            stage_0()
-            stage_1()
-            stage_2()
-            stage_3()
-            stage_4()
-            test_score = stage_5(cl)
-            print(f"  For {cl}: {test_score*100:.2f}%")
-    else:
-        best_windows = [None] * n_classifiers
-        best_scores = [-1.0] * n_classifiers
+elif auto == 1 and window_search == 0:
     
-        pl = 0  # disable plotting during search
+    pl = 1 # 0: no plots; 1: plots
+    for cl in range(n_classifiers):
+        window = windows[cl]
+        window_size = int(round(window * sampleRate))
+        print(f'Window size set to {window_size} rows for sample rate {sampleRate} Hz and window time {window} sec.')
+        classifier, classifier_name = get_classifier(cl)
+        stage_0()
+        stage_1()
+        stage_2()
+        stage_3()
+        stage_4()
+        for file_index in range(0,5):
+            test_score, Data_tag = stage_5(cl, file_index)
+            print(f"Final {Data_tag}: {classifier_name} accuracy: {test_score*100:.2f}%")
     
-        # loop over candidate windows
-        for w in range (0, len(candidate_windows)):
-            window = candidate_windows[w]
-            window_size = int(round(window * sampleRate))
-            print(f"\n=== Running pipeline for window={window}s ({window_size} rows) ===")
-            
-            # run all stages once per window
-            classifier_name = 'ALL'
-            stage_0()
-            stage_1()
-            stage_2()
-            stage_3()
-            stage_4()
-            for cl in range(n_classifiers):
-                classifier, classifier_name = get_classifier(cl)
-                test_score = stage_5(cl)            
-                print(f"   {classifier_name} accuracy: {test_score*100:.2f}%")
+elif auto == 1 and window_search == 1:
+    pl = 0  # disable plotting during search
+
+    # results storage
+    results_df = pd.DataFrame(columns=['Classifier','Window','File_Index','Accuracy'])
+
+    # track best window (only file_index=0 in search loop)
+    best_windows = {cl: {'score': -1.0, 'window': None} for cl in range(n_classifiers)}
+
+    # ---------------- Main Search (file_index = 0 only) ----------------
+    for w in range(len(candidate_windows)):
+        window = candidate_windows[w]
+        window_size = int(round(window * sampleRate))
+        print(f"\n=== Running pipeline for window={window}s ({window_size} rows) ===")
         
-                # check if best for this classifier
-                if test_score > best_scores[cl]:
-                    best_scores[cl] = test_score
-                    best_windows[cl] = window
-    
-        print("\n================= Search finished =================")
+        # run all stages once per window
+        classifier_name = 'ALL'
+        stage_0()
+        stage_1()
+        stage_2()
+        stage_3()
+        stage_4()
         for cl in range(n_classifiers):
-            clf_name = get_classifier(cl)[1]
-            print(f"Best window for {clf_name}: {best_windows[cl]}s "
-                  f"(accuracy={best_scores[cl]*100:.2f}%)")
-    
-        # re-run pipeline using each best window
-        pl = 1  # enable plotting
-        for cl in range(n_classifiers):
-            window = best_windows[cl]
-            window_size = int(round(window * sampleRate))
-            print(f"\nRe-running for {get_classifier(cl)[1]} with best window={window}s")
             classifier, classifier_name = get_classifier(cl)
+            
+            # always use file_index=0 for search
+            file_index = 0
+            test_score, Data_tag = stage_5(cl, file_index)            
+            acc = test_score * 100
+            print(f"   {Data_tag}: {classifier_name} accuracy: {acc:.2f}%")
+
+            # store results
+            results_df.loc[len(results_df)] = [classifier_name, window, file_index, acc]
+
+            # update best window
+            if acc > best_windows[cl]['score']:
+                best_windows[cl]['score'] = acc
+                best_windows[cl]['window'] = window
+
+    print("\n================= Window search finished =================")
+    for cl in range(n_classifiers):
+        clf_name = get_classifier(cl)[1]
+        best = best_windows[cl]
+        print(f"Best window for {clf_name}: {best['window']}s "
+              f"(accuracy={best['score']:.2f}% with file_index=0)")
+    
+    # ---------------- Plot search results ----------------
+    plt.figure(figsize=(10,6))
+    colors = plt.cm.tab10.colors
+
+    for cl in range(n_classifiers):
+        clf_name = get_classifier(cl)[1]
+        subset = results_df[results_df['Classifier']==clf_name]
+        grouped = subset.groupby('Window')['Accuracy'].mean().reset_index()
+        color = colors[cl % len(colors)]
+        
+        plt.plot(grouped['Window'], grouped['Accuracy'], marker='o', color=color, label=clf_name)
+        
+        # mark best window (from search with file_index=0)
+        best = best_windows[cl]
+        plt.scatter(best['window'], best['score'], marker='*', s=200, 
+                    color=color, edgecolor='black', zorder=5)
+
+    plt.xlabel("Window (s)")
+    plt.ylabel("Accuracy (%)")
+    plt.title("Classifier Accuracy vs Window Size (file_index=0)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("results_window_search.png", dpi=600)
+    plt.show()
+
+    # ---------------- Re-run with best window & best file_index ----------------
+    pl = 1  # enable plots
+    model_create = 0  # set =1 if you want micromlgen export too
+
+    for cl in range(n_classifiers):
+        clf_name = get_classifier(cl)[1]
+        best_window = best_windows[cl]['window']
+        
+        best_final = {'score': -1.0, 'file_index': None}
+        
+        for file_index in range(0,5):
+            window = best_window
+            window_size = int(round(window * sampleRate))
+            
+            print(f"\nTesting {clf_name} with window={window}s and file_index={file_index}")
+            classifier, classifier_name = get_classifier(cl)
+            
             stage_0()
             stage_1()
             stage_2()
             stage_3()
             stage_4()
-            test_score= stage_5(cl)
-            print(f"Final {clf_name} accuracy: {test_score*100:.2f}%")
+            test_score, Data_tag = stage_5(cl, file_index)
+            acc = test_score * 100
+            print(f"   {Data_tag}: {clf_name} accuracy={acc:.2f}%")
+
+            if acc > best_final['score']:
+                best_final['score'] = acc
+                best_final['file_index'] = file_index
+
+            # log each re-run
+            results_df.loc[len(results_df)] = [clf_name, window, file_index, acc]
+
+        # final best combination
+        print(f"\n>>> Final BEST for {clf_name}: "
+              f"window={best_window}s, file_index={best_final['file_index']}, "
+              f"accuracy={best_final['score']:.2f}%")
+
+        # add final run
+        results_df.loc[len(results_df)] = [clf_name, best_window, "final_best", best_final['score']]
+
+    # save all results
+    results_df.to_csv("all_results_classifier_windows.csv", index=False)
+    print("\nSaved full results to all_results_classifier_windows.csv")
+        
+    # ---------------- Final run with best (window, file_index) ----------------
+    print("\n================= Final Run with Best Parameters =================")
+    pl = 1   # force plotting for final best run
+    model_create = 1  # set to 1 if you also want micromlgen C export
+
+    for cl in range(n_classifiers):
+        clf_name = get_classifier(cl)[1]
+        best_window = best_windows[cl]['window']
+        
+        # best file_index was found in the re-run loop
+        final_best_row = results_df[(results_df['Classifier']==clf_name) & 
+                                    (results_df['File_Index']=="final_best")]
+        if final_best_row.empty:
+            print(f"Warning: no final_best row found for {clf_name}")
+            continue
+        
+        file_index = int(final_best_row['File_Index'].index[-1])  # last recorded best
+        best_acc = final_best_row['Accuracy'].iloc[-1]
+        
+        # set parameters
+        window = best_window
+        window_size = int(round(window * sampleRate))
+        
+        print(f"\n>>> Last run for {clf_name} with window={window}s and file_index={file_index}")
+        classifier, classifier_name = get_classifier(cl)
+        
+        test_score, Data_tag = stage_5(cl, file_index)
+        acc = test_score * 100
+        print(f"Final run {Data_tag}: {clf_name} accuracy={acc:.2f}%")
+
+        # add to results_df explicitly
+        results_df.loc[len(results_df)] = [clf_name, window, "last_run", acc]
+
+    # Save updated results
+    results_df.to_csv("all_results_classifier_windows.csv", index=False)
+    print("\nSaved updated results (with last run) to all_results_classifier_windows.csv")
 
