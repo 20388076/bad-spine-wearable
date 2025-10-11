@@ -55,6 +55,6 @@ def convert_csv_to_cpp(input_file: str, array_name: str):
 # Example usage:
 if __name__ == "__main__":
     # Change these paths/names to your actual files
-    convert_csv_to_cpp("./4_FEATS_COMBINED/9.71_Hz_sampling/X_test_9.71.csv", "X_test")
-    convert_csv_to_cpp("./4_FEATS_COMBINED/9.71_Hz_sampling/y_test_9.71.csv", "y_test")
+    convert_csv_to_cpp("X_data.csv", "X_data")
+    convert_csv_to_cpp("y_data.csv", "y_data")
 

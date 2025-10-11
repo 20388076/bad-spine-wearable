@@ -35,10 +35,10 @@ TaskFunction_t Task1code1, Task1code2;
 #define USE_RAW_DATA 0 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
 
 #if USE_RAW_DATA
-#include "RF9.71W120.h"
+#include "RF9.71W2.h"
 Eloquent::ML::Port::RandomForest model;
 #else
-#include "DT9.71W120.h" //"Best_DecisionTree.h"
+#include "DT9.71W2.h" //"Best_DecisionTree.h"
 Eloquent::ML::Port::DecisionTree model;
 #endif
 
@@ -52,7 +52,7 @@ Eloquent::ML::Port::DecisionTree model;
 // 5: Gradual movement detection 3 steps per minute with random movement / anomaly detection (for x - > choice_num = 12, y - > choice_num = 13, z - > choice_num = 14)
 // Choice number for test data (0-14 for different test scenarios)
 
-int scenario = 1; // scenario of expirament 1-5
+int scenario = 4; // scenario of expirament 1-5
 char axis = 'x';  // Can be 'x', 'y', or 'z'
 
 int choice_num = 0; // Will be set based on scenario and axis
@@ -97,7 +97,7 @@ setChoiceNum() {
 float sampleRate = 9.71f; // Sample rate in Hz       <-- Change this value  according to your needs
 
 const int WINDOW =
-    1165; // number of samples per window     <-- Change this value  based on the window size in seconds and sample rate
+    19; // number of samples per window     <-- Change this value  based on the window size in seconds and sample rate
 // WINDOW = round( sampleRate * window size in seconds)
 // e.g. for 2 second window and sample rate 9.71 Hz, WINDOW = 19
 // e.g. for 2 second window and sample rate 10 Hz, WINDOW = 20
@@ -114,8 +114,10 @@ int last_position = initial_position; // Last position of servo motor
 int step;                             // Factor to decrease position by degrees per miniute
 
 /* Sampling and Features Variables configuration */
-const long MAX_RESULTS = 30;
-float y_test[MAX_RESULTS]; // Array to hold test values
+const long X_data_shape_0 =
+    450; //1800;//405; // Total number of row data samples (change based on X_data(sample rate).csv dataset size)
+const long MAX_RESULTS = X_data_shape_0 / 15; // Total number of test samples (change based on test data size)
+float y_test[MAX_RESULTS];                    // Array to hold test values
 
 // Initialize all elements with choice_num
 void
@@ -132,6 +134,7 @@ const float G_CONST = 9.80665f;                  // Standard gravity
 float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
 float t1, t2;                                    // Measurements computation time variable
 unsigned long start;                             // Start time variable
+float offset = 3; // Offset to achieve desired sample rate (1 = ideal, >1 = more time windows within same sample rate)
 // float fft_real_acc_x[WINDOW], fft_real_gyro_x[WINDOW]; // FFT real parts
 float theta_x, theta_y, theta_z; // tilt angles
 // FFT parameters
@@ -505,10 +508,12 @@ Task1code(void* pvParameters) {
             } else if (sample_index == WINDOW - 1) {
                 // float output_matrix[75]; // Initialize output matrix
                 // --- Start feature computations ---
-                UBaseType_t freeStack = uxTaskGetStackHighWaterMark(NULL);
-                Serial.printf("Task1 stack remaining: %u words (%u bytes)\n", freeStack, freeStack * 4);
+                // UBaseType_t freeStack = uxTaskGetStackHighWaterMark(NULL);
+                // Serial.printf("Task1 stack remaining: %u words (%u bytes)\n", freeStack, freeStack * 4);
 
-                int selectedFeatures[] = {64, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+                int selectedFeatures[] = {
+                    1, 2, 3, 4, 5, 6,
+                    7, 8, 9, 10}; //{22, 25, 39, 61, 26,44, 62, 63, 29, 28}; // DecisionTree RELIEF features  {63, 61, 68, 62, 23, 4, 64, 1, 5, 27};
                 int numFeatures = sizeof(selectedFeatures) / sizeof(selectedFeatures[0]);
                 float values[numFeatures];
 
@@ -526,12 +531,12 @@ Task1code(void* pvParameters) {
                 }
 
                 t2 = millis() - start;
-                Serial.printf("\nComputation time2: %.2f ms\n", t2);
+                // Serial.printf("\nComputation time2: %.2f ms\n", t2);
                 iteration++;
                 taskYIELD(); // let idle run
                 vTaskDelay(pdMS_TO_TICKS(1));
                 vTaskDelay(pdMS_TO_TICKS(
-                    (5 * samplePeriod)
+                    (offset * samplePeriod)
                     - t2)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
             }
         }

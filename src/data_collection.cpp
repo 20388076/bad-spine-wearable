@@ -82,6 +82,7 @@ loop() {
     vTaskDelay(pdMS_TO_TICKS(
         samplePeriod - t)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
 }
+
 /*
 
 static float scratch1[WINDOW];
@@ -196,5 +197,3 @@ float cubic_prod_median(float* x, float* y, float* z, int n) {
 
 
  */
-
-       
