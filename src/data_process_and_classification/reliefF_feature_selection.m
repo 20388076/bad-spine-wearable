@@ -17,8 +17,8 @@ function relieff_feature_selection(rateStr,classifier,window)
     % Build full paths
     baseName = rateStr + classifier;
 
-    Xfile = fullfile(dataFolder, 'X_train_' + baseName + '.csv');
-    yfile = fullfile(dataFolder, 'y_train_' + baseName + '.csv');
+    Xfile = fullfile(dataFolder, 'X_data_' + baseName + '.csv');
+    yfile = fullfile(dataFolder, 'y_data_' + baseName + '.csv');
 
     % Import data
     X = single(round(readmatrix(Xfile, 'NumHeaderLines', 1), 3));

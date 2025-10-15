@@ -39,49 +39,11 @@ def RETURN():
 # ----------------------------- Kernel clean call -----------------------------
 cls()
 
-# ============================= Data Process Option Guide =====================
-r'''
-This program processes raw sensor data (accelerometer and gyroscope) from CSV files, cleans it, extracts features, and saves the results.
-It supports 4 main stages of data processing:    
-0. Data Cleaning: Removes unnecessary lines from raw CSV files and saves cleaned data and plots them.
-    The results are saved in new CSV files with '_clean' suffix
-1. Feature Extraction: Computes various features from the cleaned data: vector magnitudes,
-    cubic products, gradients, window-based statistics and features: min, mean, max, signal magnitude area, root mean square,
-    mean absolute deviation, variance, standard deviation, interquartile range, fast Fourier transform, and energy.
-    The features which computed over defined windows of data with 'window' variable.
-    The results are saved in new CSV files with '_feat_prepr' suffix.
-2. FFT Feature Processing: Reads the preprocessed feature files, computes the standard deviation of FFT features across all datasets,
-    and replaces the FFT values in each dataset with the value from the line that has the highest standard deviation.
-    The results are saved in new CSV files with '_feat' suffix.
-3. Build Machine Learning - ML dataset (X_data, y_data): Combines all feature files into a single dataset, assigns class labels based on file names,
-    and saves the combined features and labels into 'X_data.csv' and 'y_data.csv', splits combine data to train - test datasets for ML, with the same 
-    pattern to be followed for raw and g converted data.
-4. Feature Selection */If you using only Python code and set matlab = 0/* using ReliefF algorithm: Applies the ReliefF feature selection algorithm to the training dataset,
-    selects the top features based on their importance scores, and saves the reduced feature set and feature weights to CSV files.
-    The results are saved in 'X_train_reduced_idx_py.csv' and 'Python_relieff_feature_indices_weights.csv'. 
-    Plotting the weight order best features and combine the ESP32 computation time.
-    *** You can skip the ReliefF using the Matlab ReliefF program named: reliefF_feature_selection.m
-    by setting the 'matlab' variable to 1. *** 
-    The results are saved in 'Relieff_Feature_Weights.png' and 'ESP32_computation_time.png'.
-    Also, returns the indices of the 10 best selected weight based features for Edge AI implementation.
-
-To run the program, set the 'stage' variable set the variable accordingly to the desired operation:
-- 0 for Data Cleaning
-- 1 for Feature Extraction
-- 2 for FFT Feature Processing
-- 3 for Build ML dataset (X_data, y_data) 
-- 4 for mainly Plotting the weight order best features and combine the ESP32 computation time.
-    If using only Python: matlab = 0 -> for Feature Selection using ReliefF algorithm 
-    If using Matlab feature selection: matlab = 1 
-    
-To run all stages sequentially, set 'auto' to 1. To run only one stage, set 'auto' to 0.
-
-'''
 # ============================= MAIN PROGRAM ==================================
 series_of_experiments = 1 #
 # ------------------------------ Auto Runner Option ---------------------------
 # 0: run only one stage; 1: run all stages
-auto = 1
+auto = 0
 # ------------------------------ Data Process Option --------------------------
 # 0: raw -> clean;  
 # 1: clean -> features preprocessed; 
@@ -96,10 +58,10 @@ stage = 5
 matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF   
 # ----------------------------- Window Size -----------------------------------
 # Define window in sec for data trimming to fit window size and window-based features per classifier
-windows = [200,200] # sec  IF window_search = 0 <-- Change this table to set time window per classifier
+windows = [8,8] # sec  IF window_search = 0 <-- Change this table to set time window per classifier
 # ----------------------------- Window Search Value -----------------------------------
 window_search = 0 # Set 1 to search for the best time window from a list of time window named candidate_windows
-candidate_windows = [1,2,4,6,8,10,20,40,60,80,100,200] # in sec (1s - 3min, 20s)
+candidate_windows = [8,10,20,40,60,80,100,120,140]  # in sec (8s - 2min, 10s)
 # ----------------------------- Sample Rate Dataset ---------------------------
 # Available Datasets
 # 1) 9.71 Hz
@@ -108,7 +70,7 @@ candidate_windows = [1,2,4,6,8,10,20,40,60,80,100,200] # in sec (1s - 3min, 20s)
 sampleRate = 9.71 # Sample rate in Hz     <-- Change this value to set sample rate
 # ----------------------------- Classifier Factory ----------------------------
 def get_classifier(cl):
-    if cl == 0:  # Decision Tree 
+    if cl == 0: # Decision Tree 
         from sklearn.tree import DecisionTreeClassifier
         return DecisionTreeClassifier(), 'DT'
     elif cl == 1:  # Random Forest 
@@ -123,18 +85,21 @@ n_classifiers = 2  # DecisionTree, RandomForest
 def get_paths(stage, sampleRate, classifier_name):
     base = f"{sampleRate}_Hz_sampling/{classifier_name}"
     if series_of_experiments == 1:
-        exp_files = [
-            f'x_1_0mv_{sampleRate}.csv',f'y_1_0mv_{sampleRate}.csv',f'z_1_0mv_{sampleRate}.csv',
-            f'x_2_r_mv_{sampleRate}.csv',f'y_2_r_mv_{sampleRate}.csv', f'z_2_r_mv_{sampleRate}.csv',
-            f'x_3_1st_p_min_{sampleRate}.csv', f'y_3_1st_p_min_{sampleRate}.csv', f'z_3_1st_p_min_{sampleRate}.csv',
-            f'x_4_2st_p_min_{sampleRate}.csv', f'y_4_2st_p_min_{sampleRate}.csv', f'z_4_2st_p_min_{sampleRate}.csv',
-            f'x_5_3st_p_min_w_ad_{sampleRate}.csv', f'y_5_3st_p_min_w_ad_{sampleRate}.csv',f'z_5_3st_p_min_w_ad_{sampleRate}.csv'
-        ]
+        exp_files = [f'x_1_{sampleRate}.csv',f'y_1_{sampleRate}.csv',f'z_1_{sampleRate}.csv',
+                     f'x_2_{sampleRate}.csv',f'y_2_{sampleRate}.csv', f'z_2_{sampleRate}.csv',
+                     f'x_3_{sampleRate}.csv', f'y_3_{sampleRate}.csv', f'z_3_{sampleRate}.csv',
+                     f'x_4_{sampleRate}.csv', f'y_4_{sampleRate}.csv', f'z_4_{sampleRate}.csv',
+                     f'x_5_{sampleRate}.csv', f'y_5_{sampleRate}.csv',f'z_5_{sampleRate}.csv'
+                    ]
+        validate_files = ['try_x_1_{sampleRate}.csv','try_y_1_{sampleRate}.csv','try_z_1_{sampleRate}.csv',
+                         'try_x_2_{sampleRate}.csv','try_y_2_{sampleRate}.csv','try_z_2_{sampleRate}.csv',
+                         'try_x_3_{sampleRate}.csv','try_y_3_{sampleRate}.csv','try_z_3_{sampleRate}.csv',
+                         'try_x_4_{sampleRate}.csv','try_y_4_{sampleRate}.csv','try_z_4_{sampleRate}.csv',
+                         'try_x_5_{sampleRate}.csv','try_y_5_{sampleRate}.csv','try_z_5_{sampleRate}.csv'
+                         ]
         exp_path = f'./0_RAW/series_of_experiments_1/{sampleRate}_Hz_sampling/'
     elif series_of_experiments == 2:
-        exp_files = ['try_x_1_9.71.csv','try_x_2_9.71.csv','try_x_3_9.71.csv','try_x_4_9.71.csv', 'try_x_5_9.71.csv',
-                     'try_y_1_9.71.csv','try_y_2_9.71.csv','try_y_3_9.71.csv','try_y_4_9.71.csv', 'try_y_5_9.71.csv',
-                     'try_z_1_9.71.csv','try_z_2_9.71.csv','try_z_3_9.71.csv','try_z_4_9.71.csv', 'try_z_5_9.71.csv']
+        exp_files = []
         exp_path = f'./0_RAW/series_of_experiments_2/{sampleRate}_Hz_sampling/'
     if stage == 0:
         in_files = exp_files
@@ -180,10 +145,7 @@ def get_paths(stage, sampleRate, classifier_name):
 def stage_0():
     print(f'\n ======= Data Process: 0 for {window}s =======\n')
     # ---------------- Import Libraries ------------------
-    import os
-    import pandas as pd
-    import csv
-    import matplotlib.pyplot as plt
+    import os, pandas as pd, matplotlib.pyplot as plt, csv
     # ----------------------------------------------------
     
     # Define the path for saving plots
@@ -264,7 +226,7 @@ def stage_0():
     
     # ================= Step 4: Plotting all datasets for inspection =================
     
-    if pl == 1:     
+    if pl == 0:     
         # Load all datasets
         datasets = {fname: pd.read_csv(output_path_0 + fname) for fname in output_file_0}
         
@@ -273,11 +235,11 @@ def stage_0():
         # -------------------------------
         axis_labels = {'x': 'X Axis', 'y': 'Y Axis', 'z': 'Z Axis'}
         step_conditions = {
-            0: f'1_0mv_{sampleRate}{classifier_name}_clean.csv',
-            1: f'2_r_mv_{sampleRate}{classifier_name}_clean.csv',   
-            2: f'3_1st_p_min_{sampleRate}{classifier_name}_clean.csv',
-            3: f'4_2st_p_min_{sampleRate}{classifier_name}_clean.csv',
-            4: f'5_3st_p_min_w_ad_{sampleRate}{classifier_name}_clean.csv'
+            0: f'1_{sampleRate}{classifier_name}_clean.csv',
+            1: f'2_{sampleRate}{classifier_name}_clean.csv',   
+            2: f'3_{sampleRate}{classifier_name}_clean.csv',
+            3: f'4_{sampleRate}{classifier_name}_clean.csv',
+            4: f'5_{sampleRate}{classifier_name}_clean.csv'
         }
         
         for axis, axis_name in axis_labels.items():
@@ -334,13 +296,10 @@ def stage_1():
     print(f'\n======= Data Process: 1 for {window}s  =======\n')
     t1=tic()
     # ---------------- Import Libraries ------------------
-    import os
-    import pandas as pd
-    import numpy as np
+    import os, pandas as pd, numpy as np, multiprocessing
     from scipy.fft import fft
     from scipy.stats import iqr
     from joblib import Parallel, delayed
-    import multiprocessing
     # ----------------------------------------------------
     input_file_1, input_path_1, output_file_1, output_path_1 = get_paths(1, sampleRate, classifier_name)
     
@@ -490,9 +449,7 @@ def stage_1():
 def stage_2():
     print(f'\n======= Data Process: 2 for {window}s  =======\n')
     # ---------------- Import Libraries ------------------
-    import os
-    import pandas as pd
-    import numpy as np
+    import os, pandas as pd, numpy as np
     # ----------------------------------------------------
     
     input_file_2, input_path_2, output_file_2, output_path_2 = get_paths(2, sampleRate, classifier_name)
@@ -584,9 +541,7 @@ def stage_3():
     print(f'\n======= Data Process: 3 for {window}s  =======\n')
     
     # ---------------- Import Libraries ------------------
-    import os
-    import pandas as pd
-    import numpy as np
+    import os, pandas as pd, numpy as np
     # ----------------------------------------------------
     # ------------------- Sub Function -------------------
     def TrainTestSplit(X, y, train_size=0.75, test_size=0.25):
@@ -698,48 +653,31 @@ def stage_3():
     X_data = pd.concat(all_X, axis=0, ignore_index=True)
     y_data = pd.Series(np.concatenate(all_y), name='label')
     
-    all_raw_data = pd.concat(all_raw_data, axis=0, ignore_index=True)
-    all_norm_data = pd.concat(all_norm_data, axis=0, ignore_index=True)
+    #all_raw_data = pd.concat(all_raw_data, axis=0, ignore_index=True)
+    #all_norm_data = pd.concat(all_norm_data, axis=0, ignore_index=True)
     
-    raw_y = np.concatenate(raw_labels)
-    norm_y = np.concatenate(norm_labels)
+    #raw_y = np.concatenate(raw_labels)
+    #norm_y = np.concatenate(norm_labels)
     
-    raw_y = pd.Series(np.concatenate(raw_labels), name='label')
-    norm_y = pd.Series(np.concatenate(norm_labels), name='label')
+    #raw_y = pd.Series(np.concatenate(raw_labels), name='label')
+    #norm_y = pd.Series(np.concatenate(norm_labels), name='label')
     
     # Train - Test split before feature selection for models accuracy evaluation
-    train_size = 0.75
-    test_size = 0.25
-    X_train, X_test, y_train, y_test = TrainTestSplit(X_data, y_data, train_size, test_size)
+    #train_size = 0.50
+    #test_size = 0.50
+    #from sklearn.model_selection import train_test_split
+    #X_train, X_test, y_train, y_test = train_test_split(X_data, y_data, train_size = 0.75, test_size = 0.25)
+    #X_train, X_test, y_train, y_test = TrainTestSplit(X_data, y_data, train_size, test_size)
     
-    raw_train, raw_test, y_raw_train, y_raw_test = TrainTestSplit(all_raw_data, raw_y, train_size, test_size)
-    norm_train, norm_test, y_norm_train, y_norm_test = TrainTestSplit(all_norm_data, norm_y, train_size, test_size)
+    #raw_train, raw_test, y_raw_train, y_raw_test = TrainTestSplit(all_raw_data, raw_y, train_size, test_size)
+    #norm_train, norm_test, y_norm_train, y_norm_test = TrainTestSplit(all_norm_data, norm_y, train_size, test_size)
     
     # ---- Save datasets (headers, NO index) ----
     save_items = {
         # aggregated features
         f'X_data_{sampleRate}{classifier_name}.csv': X_data,
         f'y_data_{sampleRate}{classifier_name}.csv': y_data.to_frame(),   # ensure it has name 'label'
-        f'X_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(X_train, columns=X_data.columns, dtype=np.float32),
-        f'y_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_train, columns=['label']),
-        f'X_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(X_test, columns=X_data.columns, dtype=np.float32),
-        f'y_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_test, columns=['label']),
         
-        # raw version
-        f'all_raw_data_{sampleRate}{classifier_name}.csv': all_raw_data,
-        f'y_all_raw_data_{sampleRate}{classifier_name}.csv': pd.DataFrame(raw_y, columns=['label']),
-        f'all_raw_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(raw_train, columns=all_raw_data.columns, dtype=np.float32),
-        f'y_all_raw_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_raw_train, columns=['label']),
-        f'all_raw_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(raw_test, columns=all_raw_data.columns, dtype=np.float32),
-        f'y_all_raw_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_raw_test, columns=['label']),
-        
-        # norm version
-        f'all_norm_data_{sampleRate}{classifier_name}.csv': all_norm_data,
-        f'y_all_norm_data_{sampleRate}{classifier_name}.csv': pd.DataFrame(norm_y, columns=['label']),
-        f'all_norm_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(norm_train, columns=all_norm_data.columns, dtype=np.float32),
-        f'y_all_norm_train_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_norm_train, columns=['label']),
-        f'all_norm_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(norm_test, columns=all_norm_data.columns, dtype=np.float32),
-        f'y_all_norm_test_{sampleRate}{classifier_name}.csv': pd.DataFrame(y_norm_test, columns=['label']),
     }
     
     for fname, df in save_items.items():
@@ -759,10 +697,7 @@ def stage_4():
     """
     print(f'\n======= Data Process: 4 for {window}s  =======\n')
     # ---------------- Import Libraries ------------------
-    import os
-    import pandas as pd
-    import numpy as np
-    import matplotlib.pyplot as plt
+    import os, pandas as pd, numpy as np, matplotlib.pyplot as plt
     # ----------------------------------------------------
     # Define the path for saving plots
     def plot (output_path):
@@ -889,8 +824,8 @@ def stage_4():
     weights_df['Feature_Index'] = weights_df['Feature_Index'] - base_index
     
     # ---- Step 2: Load features ----
-    X_train = pd.read_csv(os.path.join(input_path_4, f'X_train_{sampleRate}{classifier_name}.csv'))
-    X_test  = pd.read_csv(os.path.join(input_path_4, f'X_test_{sampleRate}{classifier_name}.csv'))
+    X_train = pd.read_csv(os.path.join(input_path_4, f'X_data_{sampleRate}{classifier_name}.csv'))
+    X_test  = pd.read_csv(os.path.join(input_path_4, f'X_data{window}.csv'))
     feature_names = X_train.columns.to_list()
     
     # ---- Step 3: Order features by ReliefF weight ----
@@ -1029,15 +964,12 @@ def stage_4():
 def stage_5(cl, file_index):
     print(f'\n======= Data Process: 5 for {window}s  =======\n')
     # ---------------- Import Libraries ------------------
-    import pandas as pd
-    import numpy as np
-    import matplotlib.pyplot as plt
+    import pandas as pd, numpy as np, matplotlib.pyplot as plt, multiprocessing
     from sklearn.model_selection import TimeSeriesSplit
-    import random
     from sklearn.model_selection import  RandomizedSearchCV
-    import multiprocessing
     from scipy.stats import randint
     from micromlgen import port
+    from sklearn.metrics import accuracy_score, ConfusionMatrixDisplay, confusion_matrix
     #import m2cgen as m2c
     # ----------------------------------------------------
 
@@ -1097,7 +1029,7 @@ def stage_5(cl, file_index):
         # Original class names from filenames
         original_class_names   = [
             f'x_1_0mv_{sampleRate}',f'y_1_0mv_{sampleRate}',f'z_1_0mv_{sampleRate}',
-            f'x_2_r_mv_{sampleRate}',f'y_2_r_mv_{sampleRate}', f'z_2_r_mv_{sampleRate}',
+            f'x_2_r_mv_{sampleRate}',f'y_2_r_mv_{sampleRate}',f'z_2_r_mv_{sampleRate}',
             f'x_3_1st_p_min_{sampleRate}', f'y_3_1st_p_min_{sampleRate}', f'z_3_1st_p_min_{sampleRate}',
             f'x_4_2st_p_min_{sampleRate}', f'y_4_2st_p_min_{sampleRate}', f'z_4_2st_p_min_{sampleRate}',
             f'x_5_3st_p_min_w_ad_{sampleRate}', f'y_5_3st_p_min_w_ad_{sampleRate}',f'z_5_3st_p_min_w_ad_{sampleRate}'
@@ -1108,6 +1040,10 @@ def stage_5(cl, file_index):
         with redirect_stdout(buf):
             # Plot confusion matrix image as an example 
             # Original class names from filenames
+            expected_features = classifier.feature_names_in_
+            
+            # --- Step 2: Keep only those columns ---
+            X_new_test = X_test.loc[:, expected_features]
             
             # Generate numeric labels for display
             class_names = [f'Class {i}' for i in range(len(original_class_names))]
@@ -1120,7 +1056,7 @@ def stage_5(cl, file_index):
             fig, ax = plt.subplots(figsize=(10, 8))  # wider & taller
             disp = ConfusionMatrixDisplay.from_estimator(
                 classifier,
-                X_test,
+                X_new_test,
                 y_test,
                 labels=labels,                                      
                 display_labels=[f'Class {i}' for i in labels],       
@@ -1132,8 +1068,8 @@ def stage_5(cl, file_index):
                 )
             
             # Remove scientific notation    
-            plt.gca().set_xticklabels(class_names, rotation=90)
-            plt.gca().set_yticklabels(class_names)
+            #plt.gca().set_xticklabels(class_names, rotation=90)
+            #plt.gca().set_yticklabels(class_names)
             
             # Add the legend as a textbox
             plt.gcf().text(1.02, 
@@ -1143,10 +1079,12 @@ def stage_5(cl, file_index):
                            va='center', 
                            bbox=dict(facecolor='white', edgecolor='black')
                            )
-           
+            accuracy = float(accuracy)
+            #window = str(window)
+
             # Title
-            plt.title(f'{classifier_name} Confusion Matrix \n' + Data_tag 
-                       + accuracy + '%', fontsize=16)
+            plt.title(f"{classifier_name} Confusion Matrix \n{Data_tag} "
+                      f"{accuracy*100:.2f}% - {window}s", fontsize=16)
             
             # Improve readability
             plt.tick_params(axis='x', labelsize=10)
@@ -1163,10 +1101,9 @@ def stage_5(cl, file_index):
     
         return buf.getvalue(), '{classifier_name}_image.png'
     # ========================================================================
-    from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
-                                 roc_auc_score, confusion_matrix, ConfusionMatrixDisplay, classification_report, 
-                                 roc_curve, auc, RocCurveDisplay, make_scorer, root_mean_squared_error)
-    if auto == 1:
+    
+                                 
+    if auto == 1 and window_search == 1:
         classifier_name1 = 'ALL'
     else:
         classifier_name1 = classifier_name
@@ -1175,7 +1112,7 @@ def stage_5(cl, file_index):
     paths = [f'./4_FEATS_COMBINED/{sampleRate}_Hz_sampling/{classifier_name1}/',f'./5_FEATS_SELECTION/{sampleRate}_Hz_sampling/{classifier_name1}/']
     
     input_file_train = pd.DataFrame([
-        [f"X_train_{sampleRate}{classifier_name1}.csv", f"y_train_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
+        [f"X_data_{sampleRate}{classifier_name1}.csv", f"y_data_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
         [f"all_raw_train_{sampleRate}{classifier_name1}.csv", f"y_all_raw_train_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
         [f"all_norm_train _{sampleRate}{classifier_name1}.csv", f"y_all_norm_train_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
         [f"Matlab_X_train_weight_ordered_{sampleRate}{classifier_name1}.csv", f"y_train_{sampleRate}{classifier_name1}.csv", "WEIGHT BASED FEATURES "],
@@ -1183,7 +1120,7 @@ def stage_5(cl, file_index):
             ], columns=['X_file', 'y_file', 'Data_tag'])
         
     input_file_test = pd.DataFrame([
-        [f"X_test_{sampleRate}{classifier_name1}.csv", f"y_test_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
+        [f"X_data{window}.csv", f"y_data{window}.csv", "ALL_DATA "],
         [f"all_raw_test_{sampleRate}{classifier_name1}.csv", f"y_all_raw_test_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
         [f"all_norm_test_{sampleRate}{classifier_name1}.csv", f"y_all_norm_test_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
         [f"Matlab_X_test_weight_ordered_{sampleRate}{classifier_name1}.csv", f"y_test_{sampleRate}{classifier_name1}.csv", "WEIGHT BASED FEATURES "],
@@ -1206,69 +1143,86 @@ def stage_5(cl, file_index):
         # Keep feature names as a list of the first 10 names
         fNames = fNames[:10]
     
-    '''
-    # Parameter distributions for RandomizedSearchCV
-    param_dists = {
-    
-        'DT': {
-            'max_depth': randint(1, 25),
-            'min_samples_split': randint(2, 10)
-            
-        },
-        'RF': {
-            'n_estimators': randint(1, 100),
-            'max_depth': randint(1, 25),
-            'min_samples_split': randint(2, 10)
-        }
-    }
 
-    ts_cv = TimeSeriesSplit(n_splits=5) 
-        
-    search = RandomizedSearchCV(classifier, 
-                                param_dists[classifier_name], 
-                                n_iter=1000, 
-                                cv=ts_cv, 
-                                n_jobs=max(1, multiprocessing.cpu_count() - 1), 
-                                scoring='accuracy', 
-                                random_state=42)
+    import pygad
+    from sklearn.base import clone
+    from sklearn.model_selection import train_test_split
     
-    # Fit and get results
-    search.fit(X_train, y_train)
-    #results = pd.DataFrame(search.cv_results_)
-    best_params = search.best_params_
-    best_cv_score = search.best_score_
-    '''
-    if classifier_name == "RF":
-        classifier.set_params(n_jobs=-1)   # only RandomForest has n_jobs
-    best_model = classifier.fit(X_train, y_train)
-    # Test set accuracy
-    # best_model = search.best_estimator_
+    # Fix for plotting error — ensure string formatting later
+    def capture_output_and_plot(classifier_name, accuracy, Data_tag, classifier, X_test, y_test):
+        import matplotlib.pyplot as plt
+        from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
     
-    #print(best_model.feature_names_in_)
-    y_pred = best_model.predict(X_test)
+        accuracy = float(accuracy)
+        window_str = str(window)
+        Data_tag = str(Data_tag)
+    
+        y_pred = classifier.predict(X_test)
+        cm = confusion_matrix(y_test, y_pred)
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+        disp.plot(cmap="Blues")
+    
+        plt.title(f"{classifier_name} Confusion Matrix\n{Data_tag} - {accuracy*100:.2f}% - {window_str}s",
+                  fontsize=16)
+        plt.tight_layout()
+        image_path = f"ConfMatrix_{classifier_name}_{Data_tag}.png"
+        plt.savefig(image_path)
+        plt.close()
+        classification_text = f"{classifier_name}: {accuracy*100:.2f}%"
+        return classification_text, image_path
+    
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import LSTM, Dense, Dropout
+    from tensorflow.keras.callbacks import EarlyStopping
+    from tensorflow.keras.utils import to_categorical
+    import joblib, tensorflow as tf
+    
+    #global X_train, X_test, y_train, y_test, Data_tag
+
+    # ----- 2. Reshape to [samples, timesteps, features] -----
+    if X_train.ndim == 2:
+        timesteps = 1
+        feature_dim = X_train.shape[1]
+        X_train_reshaped = X_train.reshape((X_train.shape[0], timesteps, feature_dim))
+        X_test_reshaped = X_test.reshape((X_test.shape[0], timesteps, feature_dim))
+    else:
+        X_train_reshaped, X_test_reshaped = X_train, X_test
+
+    # ----- 3. Prepare labels -----
+    num_classes = len(np.unique(y_train))
+    y_train_cat = to_categorical(y_train, num_classes)
+    y_test_cat = to_categorical(y_test, num_classes)
+
+    # ----- 4. Build LSTM -----
+    model = Sequential([
+        LSTM(64, input_shape=(X_train_reshaped.shape[1], X_train_reshaped.shape[2]), return_sequences=True),
+        Dropout(0.3),
+        LSTM(32),
+        Dropout(0.3),
+        Dense(64, activation='relu'),
+        Dense(num_classes, activation='softmax')
+    ])
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    # ----- 5. Train -----
+    early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    history = model.fit(
+        X_train_reshaped, y_train_cat,
+        validation_split=0.2,
+        epochs=100,
+        batch_size=64,
+        callbacks=[early_stop],
+        verbose=1
+    )
+
+    # ----- 6. Evaluate -----
+    test_loss, test_acc = model.evaluate(X_test_reshaped, y_test_cat, verbose=0)
+    y_pred_probs = model.predict(X_test_reshaped)
+    y_pred = np.argmax(y_pred_probs, axis=1)
     test_score = accuracy_score(y_test, y_pred)
+    print(f"Train best val acc: {max(history.history['val_accuracy']):.4f}  Test acc: {test_score:.4f}")
     
-    y_pred = best_model.predict(X_train)
-    train_score = accuracy_score(y_train, y_pred)
-    summary = []
-    
-    # Store for summary
-    summary.append({
-        'Classifier': classifier_name,
-        #'CV Accuracy': round(best_cv_score, 4),
-        'Train Accuracy': round(train_score, 4),
-        'Test Accuracy': round(test_score, 4),
-        #'Best Params': best_params,
-    })
-    # Summary
-    print('\n Summary:')
-    for s in summary:
-        print(f'\n {s['Classifier']}')
-        #print(f'   CV Accuracy  : {s['CV Accuracy']}')
-        print(f'   Train : {s['Train Accuracy']}')
-        print(f'   Test Accuracy: {s['Test Accuracy']}')
-        #print(f'   Best Params  : {s['Best Params']}')
-
+    '''
     if pl == 1:
         classification_text, image_path = capture_output_and_plot(classifier_name,
                                                                       test_score, 
@@ -1301,13 +1255,63 @@ def stage_5(cl, file_index):
         # Write the file
         with open(save_path, 'w', encoding='utf-8') as f:
             f.write(model_code)   
-                                
+     '''
+     # ----- 7. Save models (TinyML + scaler) -----
+    if model_create == 1:
+         base = f"LSTM_W{window}F{file_index}"
+         os.makedirs("models", exist_ok=True)
+    
+         # Save original .h5 model
+         h5_path = os.path.join("models", f"{base}.h5")
+         model.save(h5_path)
+         #joblib.dump(scaler, os.path.join("models", f"{base}_scaler.pkl"))
+         print(f"Saved full model to {h5_path}")
+    
+         # Convert to TensorFlow Lite
+         converter = tf.lite.TFLiteConverter.from_keras_model(model)
+         converter.optimizations = [tf.lite.Optimize.DEFAULT]
+         try:
+             tflite_model = converter.convert()
+         except Exception as e:
+             print("⚠️ TFLite conversion failed:", e)
+             return test_score, Data_tag
+    
+         # Save .tflite
+         tflite_path = os.path.join("models", f"{base}.tflite")
+         with open(tflite_path, "wb") as f:
+             f.write(tflite_model)
+         print(f"Saved quantized model to {tflite_path}")
+    
+         # Convert .tflite to .h C array
+         with open(tflite_path, "rb") as f:
+             binary = f.read()
+         header_name = os.path.join("models", f"{base}.h")
+         with open(header_name, "w", encoding="utf-8") as f:
+             f.write("const unsigned char model_tflite[] = {\n")
+             for i, byte in enumerate(binary):
+                 if i % 12 == 0:
+                     f.write("\n ")
+                 f.write(f"0x{byte:02x}, ")
+             f.write("\n};\n")
+             f.write(f"const int model_tflite_len = {len(binary)};\n")
+         print(f"✅ TinyML header exported: {header_name}")
+    
+     # ----- 8. Confusion Matrix (optional) -----
+    if pl == 1:
+         cm = confusion_matrix(y_test, y_pred)
+         disp = ConfusionMatrixDisplay(cm)
+         disp.plot(cmap="Blues")
+         plt.title(f"LSTM Confusion Matrix\n{Data_tag} - {test_score*100:.2f}% - {window}s")
+         plt.tight_layout()
+         image_path = f"LSTM_CM_{Data_tag}.png"
+         plt.savefig(image_path)
+         plt.close()
+         print(f"Saved confusion matrix to {image_path}")                           
     return test_score, Data_tag
     
 # ============================= Auto Runner ===================================
-import pandas as pd
-import matplotlib.pyplot as plt
-    
+import pandas as pd, matplotlib.pyplot as plt
+
 if auto == 0: 
     # ----------------------------- Plotting Option ---------------------------
     pl = 1 # 0: no plots; 1: plots

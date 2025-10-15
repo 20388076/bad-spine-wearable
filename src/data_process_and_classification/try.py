@@ -15,16 +15,18 @@ classifier_names = ['DT','RF']
 file_indexs = [0,0]
 for cl in range(0,2):
     file_index = file_indexs[cl]
-    windows = [200,200]
+    windows = [2,2]
     sampleRate = 9.71
     classifier_name = classifier_names[cl]
     window = windows[cl]
     window_size = int(round(window * sampleRate))
 
     print(f'\n======= Data Process: 0 for {window}s  =======\n')
-    exp_files = ['try_x_1_9.71.csv','try_x_2_9.71.csv','try_x_3_9.71.csv','try_x_4_9.71.csv', 'try_x_5_9.71.csv',
-                 'try_y_1_9.71.csv','try_y_2_9.71.csv','try_y_3_9.71.csv','try_y_4_9.71.csv', 'try_y_5_9.71.csv',
-                 'try_z_1_9.71.csv','try_z_2_9.71.csv','try_z_3_9.71.csv','try_z_4_9.71.csv', 'try_z_5_9.71.csv'
+    exp_files = ['try_x_1_9.71.csv', 'try_y_1_9.71.csv','try_z_1_9.71.csv',
+                 'try_x_2_9.71.csv','try_y_2_9.71.csv','try_z_2_9.71.csv',
+                 'try_x_3_9.71.csv','try_y_3_9.71.csv','try_z_3_9.71.csv',
+                 'try_x_4_9.71.csv','try_y_4_9.71.csv','try_z_4_9.71.csv',
+                 'try_x_5_9.71.csv','try_y_5_9.71.csv','try_z_5_9.71.csv'
                  ]
     '''exp_files = [ f'x_1_0mv_{sampleRate}.csv',f'y_1_0mv_{sampleRate}.csv',f'z_1_0mv_{sampleRate}.csv',
                 f'x_2_r_mv_{sampleRate}.csv',f'y_2_r_mv_{sampleRate}.csv', f'z_2_r_mv_{sampleRate}.csv',
@@ -379,15 +381,25 @@ for cl in range(0,2):
     # Concatenate into big DataFrames
     X_data = pd.concat(all_X, axis=0, ignore_index=True)
     y_data = pd.Series(np.concatenate(all_y), name='label')
-    X_data.to_csv('X_data.csv', index=False, header=True)
-    y_data.to_csv('y_data.csv', index=False, header=True)
+    out_path1 = os.path.join(output_path_0,'X_data.csv')
+    out_path2 = os.path.join(output_path_0,'y_data.csv')
+    X_data.to_csv(out_path1, index=False, header=True)
+    y_data.to_csv(out_path2, index=False, header=True)
     
     print(f'\n======= Data Process: 5 for {window}s  =======\n')
     from sklearn.metrics import (accuracy_score,ConfusionMatrixDisplay)
     model= joblib.load(f"BEST{classifier_name}W{window}F{file_index}.pkl")
-    y_pred = model.predict(X_data)  # works like normal sklearn model
+    # --- Step 1: Extract model’s training feature names ---
+    expected_features = model.feature_names_in_
+    
+    # --- Step 2: Keep only those columns ---
+    X_new = X_data.loc[:, expected_features]
+    
+    # --- Step 3: Predict ---
+    y_pred = model.predict(X_new)  # works like normal sklearn model
     test_score = accuracy_score(y_data, y_pred)
     
+
     def capture_output_and_plot(classifier_name, accuracy, Data_tag, 
                                 classifier, X_test, y_test):
         # Original class names from filenames
@@ -430,9 +442,23 @@ for cl in range(0,2):
                 )
             
             # Remove scientific notation    
-            plt.gca().set_xticklabels(class_names, rotation=90)
-            plt.gca().set_yticklabels(class_names)
+            # plt.gca().set_xticklabels(class_names, rotation=90)
+            # plt.gca().set_yticklabels(class_names)
+            # Highlight misclassified cells in red
+            # --- Add red shades to misclassified cells ---
+            cm = disp.confusion_matrix
+            max_misclass = cm[np.where(~np.eye(cm.shape[0], dtype=bool))].max()
             
+            for (i, j), val in np.ndenumerate(cm):
+                if i != j and val > 0:
+                    alpha = min(1.0, 0.2 + 0.8 * (val / max_misclass))
+                    rect = plt.Rectangle(
+                        (j - 0.5, i - 0.5), 1, 1,
+                        facecolor=(1, 0, 0, alpha),
+                        edgecolor='none'
+                    )
+                    ax.add_patch(rect)
+                    
             # Add the legend as a textbox
             plt.gcf().text(1.02, 
                            0.5, 
@@ -460,10 +486,13 @@ for cl in range(0,2):
             plt.close()
     
         return buf.getvalue(), '{classifier_name}_image.png'
+
+
+
     
     classification_text, image_path = capture_output_and_plot(classifier_name,
                                                                   test_score, 
-                                                                      'ALL_DATA',  
+                                                                      'TRY_ALL_DATA',  
                                                                       model, 
-                                                                      X_data,
+                                                                      X_new,
                                                                       y_data)

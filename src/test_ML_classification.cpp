@@ -32,10 +32,10 @@ TaskFunction_t Task1code1, Task1code2;
 
 /* Include the Classification model file */
 
-#define USE_RAW_DATA 0 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
+#define USE_RAW_DATA 1 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
 
 #if USE_RAW_DATA
-#include "RF9.71W2.h"
+#include "RF2sec.h"
 Eloquent::ML::Port::RandomForest model;
 #else
 #include "DT9.71W2.h" //"Best_DecisionTree.h"
@@ -52,7 +52,7 @@ Eloquent::ML::Port::DecisionTree model;
 // 5: Gradual movement detection 3 steps per minute with random movement / anomaly detection (for x - > choice_num = 12, y - > choice_num = 13, z - > choice_num = 14)
 // Choice number for test data (0-14 for different test scenarios)
 
-int scenario = 4; // scenario of expirament 1-5
+int scenario = 5; // scenario of expirament 1-5
 char axis = 'x';  // Can be 'x', 'y', or 'z'
 
 int choice_num = 0; // Will be set based on scenario and axis
@@ -115,9 +115,9 @@ int step;                             // Factor to decrease position by degrees 
 
 /* Sampling and Features Variables configuration */
 const long X_data_shape_0 =
-    450; //1800;//405; // Total number of row data samples (change based on X_data(sample rate).csv dataset size)
-const long MAX_RESULTS = X_data_shape_0 / 15; // Total number of test samples (change based on test data size)
-float y_test[MAX_RESULTS];                    // Array to hold test values
+    27690;                    // Total number of row data samples (change based on X_data(sample rate).csv dataset size)
+const long MAX_RESULTS = 300; //X_data_shape_0 / 15; // Total number of test samples (change based on test data size)
+float y_test[MAX_RESULTS];    // Array to hold test values
 
 // Initialize all elements with choice_num
 void
@@ -134,7 +134,7 @@ const float G_CONST = 9.80665f;                  // Standard gravity
 float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
 float t1, t2;                                    // Measurements computation time variable
 unsigned long start;                             // Start time variable
-float offset = 3; // Offset to achieve desired sample rate (1 = ideal, >1 = more time windows within same sample rate)
+float offset = 1; // Offset to achieve desired sample rate (1 = ideal, >1 = more time windows within same sample rate)
 // float fft_real_acc_x[WINDOW], fft_real_gyro_x[WINDOW]; // FFT real parts
 float theta_x, theta_y, theta_z; // tilt angles
 // FFT parameters
@@ -511,9 +511,10 @@ Task1code(void* pvParameters) {
                 // UBaseType_t freeStack = uxTaskGetStackHighWaterMark(NULL);
                 // Serial.printf("Task1 stack remaining: %u words (%u bytes)\n", freeStack, freeStack * 4);
 
-                int selectedFeatures[] = {
-                    1, 2, 3, 4, 5, 6,
-                    7, 8, 9, 10}; //{22, 25, 39, 61, 26,44, 62, 63, 29, 28}; // DecisionTree RELIEF features  {63, 61, 68, 62, 23, 4, 64, 1, 5, 27};
+                int selectedFeatures[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                          20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+                                          39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+                                          58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75};
                 int numFeatures = sizeof(selectedFeatures) / sizeof(selectedFeatures[0]);
                 float values[numFeatures];
 
@@ -535,9 +536,8 @@ Task1code(void* pvParameters) {
                 iteration++;
                 taskYIELD(); // let idle run
                 vTaskDelay(pdMS_TO_TICKS(1));
-                vTaskDelay(pdMS_TO_TICKS(
-                    (offset * samplePeriod)
-                    - t2)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
+                vTaskDelay(pdMS_TO_TICKS((
+                    samplePeriod)-t2)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
             }
         }
     }

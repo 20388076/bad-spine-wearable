@@ -171,7 +171,7 @@ def build_confusion_matrix(pairs, class_labels, classifier_name, project_root, s
     # --- Normalize for percentages ---
     cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
     cm_normalized = np.nan_to_num(cm_normalized)  # avoid NaNs
-
+    
     # --- Plot styled heatmap ---
     plt.figure(figsize=(11, 8))
     sns.heatmap(cm_normalized,
@@ -204,7 +204,7 @@ def main(sampleRate, classifier_name, project_root=None):
         script_dir = os.path.abspath(os.path.dirname(__file__))
         project_root = os.path.join(script_dir)
 
-    esp_folder = os.path.join(project_root,'0_RAW', '9.71_Hz_sampling', 'esp_classification_results')
+    esp_folder = os.path.join(project_root,'0_RAW','series_of_experiments_1', '9.71_Hz_sampling', 'esp_classification_results')
     if not os.path.isdir(esp_folder):
         print('ESP results folder not found at:', esp_folder)
         print('Please run this script from inside the data_process_and_classification folder or use --project-root')
