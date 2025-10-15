@@ -1,20 +1,20 @@
-/*****************************************************
- *  Include Required Libraries
- *  These libraries let the ESP32 communicate with the MPU6050 sensor
- *****************************************************/
-#include <Adafruit_MPU6050.h> // Library for MPU6050 accelerometer + gyroscope
-#include <Adafruit_Sensor.h>  // Unified sensor library used by Adafruit sensors
-#include <Arduino.h>          // Core Arduino functions
-#include <Wire.h>             // I2C communication (used by MPU6050)
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <Wire.h>
 
-/*****************************************************
- *  Hardware Declarations
- *  Here we create objects for the MPU6050 sensor
- *****************************************************/
+Adafruit_MPU6050 mpu;
 
-Adafruit_MPU6050 mpu; // Object to talk with the MPU6050 sensor
+const char* ssid = "ssid-here";
+const char* password = "password-here";
+const char* udpAddress = "10.178.91.19"; //  PC's IP address (ipconfig on cmd)
+const int udpPort = 12345;
 
-/* Sampling Variables configuration */
+WiFiUDP udp;
+char packetBuffer[256];
+
 float t;                                         // Measurements computation time variable
 unsigned long start;                             // Start time variable
 float sampleRate = 9.71f;                        // Sample rate in Hz     <-- Change this value to set sample rate
@@ -22,9 +22,21 @@ float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
 
 void
 setup() {
-    Serial.begin(115200); // Start serial communication at 115200 baud rate
+    Serial.begin(115200);
 
     Serial.println("Wearable Posture Detection System, version:, author: ACHILLIOS PITTSILKAS");
+
+    // WiFi Setup
+    Serial.println("\nConnecting to WiFi...");
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nWiFi connected!");
+    Serial.print("ESP32 IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.printf("Sending data to: %s:%d\n", udpAddress, udpPort);
 
     // MPU6050 Setup using Adafruit Library
     if (!mpu.begin()) {
@@ -76,8 +88,17 @@ loop() {
     start = millis();
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp); // Acceleration is m/s^2, gyro data is rad/s
-    Serial.printf("\n%lu, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f", millis(), a.acceleration.x, a.acceleration.y,
-                  a.acceleration.z, g.gyro.x, g.gyro.y, g.gyro.z);
+
+    snprintf(packetBuffer, sizeof(packetBuffer), "%lu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f", millis(), a.acceleration.x,
+             a.acceleration.y, a.acceleration.z, g.gyro.x, g.gyro.y, g.gyro.z);
+    // Send UDP packet to PC
+    udp.beginPacket(udpAddress, udpPort);
+    udp.write((uint8_t*)packetBuffer, strlen(packetBuffer));
+    udp.endPacket();
+
+    // Also print to Serial for debugging
+    Serial.printf("\n%s", packetBuffer);
+
     t = millis() - start; // Calculate measurements computation time
     vTaskDelay(pdMS_TO_TICKS(
         samplePeriod - t)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
