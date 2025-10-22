@@ -23,12 +23,35 @@ UDP_PORT = 12345    # Must match the port in ESP32 code
 BUFFER_SIZE = 256   # Buffer size for receiving data
 
 # Create output directory if it doesn't exist
-OUTPUT_DIR = "src/raw_wireless_data"
+OUTPUT_DIR = "0_RAW/series_of_experiments_2/9.71_Hz_sampling"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
+'''
+Classes =
+good_1
+good_2
+good_3
+mid_1
+mid_2
+mid_3
+bad_1
+bad_2
+bad_3
+test_good_1
+test_good_2
+test_good_3
+test_mid_1
+test_mid_2
+test_mid_3
+test_bad_1
+test_bad_2
+test_bad_3
+'''
+sample_rate = 9.71
+Class = 'testing movements'
+exp = 'test'
 # Generate filename with timestamp
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-csv_filename = os.path.join(OUTPUT_DIR, f"sensor_data_{timestamp}.csv")
+#timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+csv_filename = os.path.join(OUTPUT_DIR, f"{Class}_{exp}_{sample_rate}.csv")
 
 # Global variables
 sock = None
@@ -77,7 +100,7 @@ def main():
     csv_writer = csv.writer(csv_file)
     
     # Write CSV header
-    csv_writer.writerow(['timestamp_ms', 'accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z'])
+    csv_writer.writerow(['t (ms)', 'a_x', 'a_y', 'a_z', 'g_x', 'g_y', 'g_z'])
     csv_file.flush()
     
     print("✅ Ready! Listening for incoming data...\n")

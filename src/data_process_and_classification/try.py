@@ -496,3 +496,230 @@ for cl in range(0,2):
                                                                       model, 
                                                                       X_new,
                                                                       y_data)
+    
+    
+    
+    
+    
+    
+'''
+        import os
+        import io
+        import numpy as np, randint
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
+        from tensorflow.keras.models import Sequential
+        from tensorflow.keras.layers import LSTM, Dense, Dropout
+        from tensorflow.keras.callbacks import EarlyStopping
+        from tensorflow.keras.utils import to_categorical
+        import tensorflow as tf
+        import joblib
+        
+    # ----- Load VAL (validation) data -----
+    # Expect files under paths[0]/VALIDATE named VAL_X_data_... and VAL_y_data_...
+    val_dir = os.path.join(f'./4_FEATS_COMBINED/{sampleRate}_Hz_sampling/{classifier_name1}', 'VALIDATE')
+    os.makedirs(val_dir, exist_ok=True)  # don't fail if folder missing; will catch missing specific files below
+
+    # Preferential file names (fixed)
+    val_x_name = os.path.join(val_dir, f'VAL_X_data_{sampleRate}{classifier_name1}.csv')
+    val_y_name = os.path.join(val_dir, f'VAL_y_data_{sampleRate}{classifier_name1}.csv')
+
+    if os.path.exists(val_x_name) and os.path.exists(val_y_name):
+        VAL_X_data_df = pd.read_csv(val_x_name, dtype=np.float32)
+        VAL_y_data_df = pd.read_csv(val_y_name, header=None)
+    else:
+        # Try fallback to earlier mistaken naming if present (to be robust)
+        alt_x = os.path.join(val_dir, f'VAL_y_data_{sampleRate}{classifier_name1}.csv')
+        alt_y = os.path.join(val_dir, f'VAL_y_data_{sampleRate}{classifier_name1}.csv')
+        if os.path.exists(alt_x) and os.path.exists(alt_y):
+            VAL_X_data_df = pd.read_csv(alt_x, dtype=np.float32)
+            VAL_y_data_df = pd.read_csv(alt_y, header=None)
+        else:
+            # If missing, create placeholders to avoid crash — but warn and return
+            raise FileNotFoundError(f"Validation data not found. Checked:\n  {val_x_name}\n  {val_y_name}")
+
+    # Convert VAL_y to 1d np array of ints
+    if isinstance(VAL_y_data_df, pd.DataFrame):
+        if isinstance(VAL_y_data_df.iloc[0, 0], str):
+            VAL_y_data_df = VAL_y_data_df.iloc[1:].reset_index(drop=True)
+    VAL_y = VAL_y_data_df.squeeze("columns").astype(np.int32).to_numpy()
+
+    # ----- Load train/test by file_index -----
+    X_train, y_train, fNames, Data_tag = loadData(paths, file_index, input_file_train)
+    X_test, y_test, fNs, Data_tag = loadData(paths, file_index, input_file_test)
+    from sklearn.utils import shuffle
+
+    X_train, y_train = shuffle(X_train, y_train, random_state=42)
+    from sklearn.preprocessing import StandardScaler
+    
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+    VAL_X_data_df = scaler.transform(VAL_X_data_df)
+    # If the stage expects only first 10 features for indices 3|4
+    if file_index in (3, 4):
+        if hasattr(X_train, 'iloc'):
+            X_train = X_train.iloc[:, :10].copy()
+            X_test = X_test.iloc[:, :10].copy()
+        else:
+            X_train = X_train[:, :10].copy()
+            X_test = X_test[:, :10].copy()
+        fNames = fNames[:10]
+
+    # Convert DataFrames to numpy arrays for model input if necessary
+    if hasattr(X_train, 'values'):
+        X_train_np = X_train.values.astype(np.float32)
+    else:
+        X_train_np = np.asarray(X_train, dtype=np.float32)
+
+    if hasattr(X_test, 'values'):
+        X_test_np = X_test.values.astype(np.float32)
+    else:
+        X_test_np = np.asarray(X_test, dtype=np.float32)
+
+    VAL_X_np = VAL_X_data_df.values.astype(np.float32) if hasattr(VAL_X_data_df, 'values') else np.asarray(VAL_X_data_df, dtype=np.float32)
+
+    # Ensure y are 1D integer arrays
+    y_train_np = np.asarray(y_train, dtype=np.int32).squeeze()
+    y_test_np = np.asarray(y_test, dtype=np.int32).squeeze()
+    VAL_y_np = np.asarray(VAL_y, dtype=np.int32).squeeze()
+
+    # ----- 2. Reshape to [samples, timesteps, features] -----
+    # If data is 2D (samples x features) we'll use timesteps=1 (i.e., non-sequence features)
+    if X_train_np.ndim == 2:
+        timesteps = 1
+        feature_dim = X_train_np.shape[1]
+        X_train_reshaped = X_train_np.reshape((X_train_np.shape[0], timesteps, feature_dim))
+        VAL_X_data_reshaped = VAL_X_np.reshape((VAL_X_np.shape[0], timesteps, VAL_X_np.shape[1] if VAL_X_np.ndim > 1 else feature_dim))
+        X_test_reshaped = X_test_np.reshape((X_test_np.shape[0], timesteps, X_test_np.shape[1]))
+    else:
+        # assume already shaped correctly
+        X_train_reshaped = X_train_np
+        X_test_reshaped = X_test_np
+        VAL_X_data_reshaped = VAL_X_np
+
+    # ----- 3. Prepare labels -----
+    unique_labels = np.unique(y_train_np)
+    num_classes = len(unique_labels)
+    # Map labels to dense 0..num_classes-1 if needed
+    # (if labels are already 0..N-1 to_categorical will still work)
+    # But to be safe, build mapping:
+    label_map = {lab: i for i, lab in enumerate(sorted(unique_labels))}
+    y_train_mapped = np.array([label_map[int(l)] for l in y_train_np], dtype=np.int32)
+    y_test_mapped = np.array([label_map[int(l)] for l in y_test_np], dtype=np.int32)
+    VAL_y_mapped = np.array([label_map[int(l)] for l in VAL_y_np], dtype=np.int32)
+
+    y_train_cat = to_categorical(y_train_mapped, num_classes)
+    y_test_cat = to_categorical(y_test_mapped, num_classes)
+    VAL_y_data_cat = to_categorical(VAL_y_mapped, num_classes)
+    from tensorflow.keras.regularizers import l2
+    # ----- 4. Build LSTM -----
+    model = Sequential([
+        LSTM(64, input_shape=(X_train_reshaped.shape[1], X_train_reshaped.shape[2]), return_sequences=True, unroll=True),
+        Dropout(0.3),
+        LSTM(32),
+        Dropout(0.3),
+        Dense(64, activation='relu'),
+        Dense(num_classes, activation='softmax')
+    ])
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    
+    # ----- 5. Train -----
+    early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    history = model.fit(
+        X_train_reshaped, y_train_cat,
+        validation_split=0.2,
+        epochs=1000,
+        batch_size=64,
+        callbacks=[early_stop],
+        verbose=1
+    )
+    
+    
+    # ----- 6. Evaluate -----
+    test_loss, test_acc = model.evaluate(VAL_X_data_reshaped, VAL_y_data_cat, verbose=0)
+    y_pred_probs = model.predict(X_test_reshaped)
+    y_pred = np.argmax(y_pred_probs, axis=1)
+    test_score = accuracy_score(y_test_mapped, y_pred)
+    print(f"Train best val acc: {max(history.history.get('val_accuracy', [0])):.4f}  Test acc: {test_score:.4f}")
+
+    # ----- 7. Save models (TinyML + scaler) -----
+    # model_create and pl are expected globals in your environment
+    if model_create == 1:
+        import tensorflow as tf
+
+        # Load your trained model (either .keras or .h5)
+        model = tf.keras.models.load_model("models/LSTM_W10F0.h5")
+        
+        # Create TFLite converter
+        converter = tf.lite.TFLiteConverter.from_keras_model(model)
+        
+        # ⚠️ Required for ESP32 compatibility
+        converter._experimental_lower_tensor_list_ops = False
+        converter.target_spec.supported_ops = [
+            tf.lite.OpsSet.TFLITE_BUILTINS, 
+            tf.lite.OpsSet.SELECT_TF_OPS
+        ]
+        
+        def representative_dataset():
+            for i in range(100):
+                # Use small batch of training data
+                yield [X_train_reshaped[i:i+1].astype(np.float32)]
+        
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        converter.representative_dataset = representative_dataset
+        converter.target_spec.supported_types = [tf.float16]  # or tf.int8
+        
+        tflite_quant_model = converter.convert()
+        
+        with open("models/LSTM_W10F0_quant.tflite", "wb") as f:
+            f.write(tflite_quant_model)
+
+    # ----- 8. Confusion Matrix (optional plotting) -----
+    if pl == 1:
+        cm = confusion_matrix(y_test_mapped, y_pred)
+        disp = ConfusionMatrixDisplay(cm)
+        fig, ax = plt.subplots(figsize=(8, 6))
+        disp.plot(ax=ax, cmap="Blues")
+        plt.title(f"LSTM Confusion Matrix\n{Data_tag} - {test_score*100:.2f}% - {window}s")
+        plt.tight_layout()
+        image_path = f"LSTM_CM_{Data_tag.strip().replace(' ', '_')}.png"
+        plt.savefig(image_path, dpi=300)
+        plt.close()
+        print(f"Saved confusion matrix to {image_path}")
+
+
+
+
+    # ================= Series 2 of experiments not need preprocess =================
+    elif series_of_experiments == 2:
+        for file_idx, fname in enumerate(input_file_0):
+            src = os.path.join(input_path_0, fname)
+            dst = os.path.join(output_path_0, output_file_0[file_idx])  # expected _feat.csv name
+            try:
+                shutil.copy2(src, dst)
+                print(f"[Series 2 of experiments {mode.upper()}] copping files-no preprocessing")
+            except Exception as e:
+                print(f"[Stage 0 - {mode.upper()}] Failed to copy {src} -> {dst}: {e}")
+            continue
+        
+'''
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

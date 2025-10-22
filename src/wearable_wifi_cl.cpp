@@ -8,6 +8,8 @@
 #include <Adafruit_Sensor.h>   // Unified sensor library used by Adafruit sensors
 #include <Arduino.h>           // Core Arduino functions
 #include <ESP32Servo.h>        // Library to control servo motors on ESP32
+#include <WiFi.h>              // WiFi library
+#include <WiFiUdp.h>           // UDP library
 #include <Wire.h>              // I2C communication (used by MPU6050)
 #include <algorithm>           // Useful for math/array operations
 #include <iostream>            // Input/output (mainly for debugging with Serial)
@@ -23,7 +25,7 @@
  *****************************************************/
 
 Adafruit_MPU6050 mpu; // Object to talk with the MPU6050 sensor
-Servo myServo;        // Object to control the servo motor
+SemaphoreHandle_t xDataReadySemaphore = NULL;
 
 // Task handles let us run two different pieces of code in "parallel"
 // (FreeRTOS allows multitasking on ESP32)
@@ -35,101 +37,35 @@ TaskFunction_t Task1code1, Task1code2;
 #define USE_RAW_DATA 1 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
 
 #if USE_RAW_DATA
-#include "RF9.71W1.h" 
+#include "RF9.71W1.h"
 Eloquent::ML::Port::RandomForest model;
 #else
 #include "DT9.71W1.h" //"Best_DecisionTree.h"
 Eloquent::ML::Port::DecisionTree model;
 #endif
 
-/* User configuration */
-
-// Senario of expirament
-// 1: No movement detection (for x - > choice_num = 0, y - > choice_num = 1, z - > choice_num = 2)
-// 2: Random movement detection (for x - > choice_num = 3, y - > choice_num = 4, z - > choice_num = 5)
-// 3: Gradual movement detection 1 step per minute (for x - > choice_num = 6, y - > choice_num = 7, z - > choice_num = 8)
-// 4: Gradual movement detection 2 steps per minute (for x - > choice_num = 9, y - > choice_num = 10, z - > choice_num = 11)
-// 5: Gradual movement detection 3 steps per minute with random movement / anomaly detection (for x - > choice_num = 12, y - > choice_num = 13, z - > choice_num = 14)
-// Choice number for test data (0-14 for different test scenarios)
-
-int scenario = 5; // scenario of expirament 1-5
-char axis = 'x';  // Can be 'x', 'y', or 'z'
-
-int choice_num = 0; // Will be set based on scenario and axis
-
-// Function to set choice_num based on scenario and axis
-void
-setChoiceNum() {
-    int axisOffset;
-
-    // Convert axis character to offset (x=0, y=1, z=2)
-    switch (axis) {
-        case 'x': axisOffset = 0; break;
-        case 'y': axisOffset = 1; break;
-        case 'z': axisOffset = 2; break;
-        default: axisOffset = 0; // default to x axis
-    }
-
-    // Calculate choice_num based on scenario and axis
-    switch (scenario) {
-        case 1:                          // No movement detection
-            choice_num = 0 + axisOffset; // x->0, y->1, z->2
-            break;
-        case 2:                          // Random movement detection
-            choice_num = 3 + axisOffset; // x->3, y->4, z->5
-            break;
-        case 3:                          // Gradual movement 1 step/min
-            choice_num = 6 + axisOffset; // x->6, y->7, z->8
-            break;
-        case 4:                          // Gradual movement 2 steps/min
-            choice_num = 9 + axisOffset; // x->9, y->10, z->11
-            break;
-        case 5:                           // Gradual movement 3 steps/min with anomaly
-            choice_num = 12 + axisOffset; // x->12, y->13, z->14
-            break;
-        default: choice_num = 0; // Default to x-axis, no movement
-    }
-
-    Serial.printf("Scenario %d, Axis %c -> choice_num = %d\n", scenario, axis, choice_num);
-}
-
 // Sampling configuration
 float sampleRate = 9.71f; // Sample rate in Hz       <-- Change this value  according to your needs
 
 const int WINDOW =
-    19; // number of samples per window     <-- Change this value  based on the window size in seconds and sample rate
+    10; // number of samples per window     <-- Change this value  based on the window size in seconds and sample rate
 // WINDOW = round( sampleRate * window size in seconds)
 // e.g. for 2 second window and sample rate 9.71 Hz, WINDOW = 19
 // e.g. for 2 second window and sample rate 10 Hz, WINDOW = 20
 // e.g. for 2 second window and sample rate 50 Hz, WINDOW = 100
 
-/* Servo Variables configuration */
+/* WiFi configuration */
 
-int initial_position = 85;      // Start at 85 degrees
-int min_position = 45;          // Minimum position of servo motor
-static const int servoPin = 25; // Connect servo to pin 25 or D2
-unsigned long previousMillis = 0;
-int new_position = 0;                 // New position for servo motor
-int last_position = initial_position; // Last position of servo motor
-int step;                             // Factor to decrease position by degrees per miniute
+const char* ssid = "Oiko-Net 5os";
+const char* password = "2107700170";
+const char* udpAddress = "192.168.1.183"; //  PC's IP address (ipconfig on cmd)
+const int udpPort = 12345;
 
-/* Sampling and Features Variables configuration */
-const long X_data_shape_0 =
-    27690;                    // Total number of row data samples (change based on X_data(sample rate).csv dataset size)
-const long MAX_RESULTS = 300; //X_data_shape_0 / 15; // Total number of test samples (change based on test data size)
-float y_test[MAX_RESULTS];    // Array to hold test values
-
-// Initialize all elements with choice_num
-void
-initializeTestArray() {
-    for (int i = 0; i < MAX_RESULTS; i++) {
-        y_test[i] = choice_num;
-    }
-}
+WiFiUDP udp;
+char packetBuffer[256]; // Buffer to hold outgoing packets
 
 float acc_x_data[WINDOW], acc_y_data[WINDOW], gyro_y_data[WINDOW], gyro_z_data[WINDOW], gyro_x_data[WINDOW],
     acc_z_data[WINDOW];                          // data arrays
-int sample_index = 0;                            // current sample index in window
 const float G_CONST = 9.80665f;                  // Standard gravity
 float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
 float t1, t2;                                    // Measurements computation time variable
@@ -140,6 +76,7 @@ float theta_x, theta_y, theta_z; // tilt angles
 // FFT parameters
 float fft_real[WINDOW];
 float fft_mag[WINDOW];
+volatile int predicted;
 
 /* Features Functions */
 
@@ -479,131 +416,57 @@ computeFeature(int featureId) {
 
 void
 Task1code(void* pvParameters) {
-    long iteration = 0;
-    int correct = 0;
-    int total = MAX_RESULTS;
-    while (iteration < MAX_RESULTS) {
-        sample_index = 0;
-
+    for (;;) {
+        int sample_index = 0;
         for (int i = 0; i < WINDOW; i++) {
             start = millis();
             sensors_event_t a, g, temp;
             mpu.getEvent(&a, &g, &temp);
-            acc_x_data[i] = a.acceleration.x / G_CONST; // Convert acceleration from m/s^2 to g
+            acc_x_data[i] = a.acceleration.x / G_CONST;
             acc_y_data[i] = a.acceleration.y / G_CONST;
             acc_z_data[i] = a.acceleration.z / G_CONST;
             gyro_x_data[i] = g.gyro.x;
             gyro_y_data[i] = g.gyro.y;
             gyro_z_data[i] = g.gyro.z;
 
-            sample_index = i;
-
-            if (sample_index < WINDOW - 1) {
+            if (i < WINDOW - 1) {
                 t1 = millis() - start;
-                //Serial.printf("\nComputation time1: %.2f ms\n", t1);
-                vTaskDelay(pdMS_TO_TICKS(
-                    samplePeriod
-                    - t1)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
-
-            } else if (sample_index == WINDOW - 1) {
-                // float output_matrix[75]; // Initialize output matrix
-                // --- Start feature computations ---
-                // UBaseType_t freeStack = uxTaskGetStackHighWaterMark(NULL);
-                // Serial.printf("Task1 stack remaining: %u words (%u bytes)\n", freeStack, freeStack * 4);
-
-                int selectedFeatures[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-                                          20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
-                                          39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
-                                          58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75};
-                int numFeatures = sizeof(selectedFeatures) / sizeof(selectedFeatures[0]);
-                float values[numFeatures];
-
-                for (int i = 0; i < numFeatures; i++) {
-                    values[i] = computeFeature(selectedFeatures[i]);
-                }
-
-                int predicted = model.predict(values);
-
-                Serial.printf("\nIteration %ld/%ld - Prediction result: %d\n", iteration, MAX_RESULTS, predicted);
-                int actual = (int)y_test[iteration];
-
-                if (predicted == actual) {
-                    correct++;
-                }
-
-                t2 = millis() - start;
-                // Serial.printf("\nComputation time2: %.2f ms\n", t2);
-                iteration++;
-                taskYIELD(); // let idle run
-                vTaskDelay(pdMS_TO_TICKS(1));
-                vTaskDelay(pdMS_TO_TICKS((
-                    samplePeriod)-t2)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
+                vTaskDelay(pdMS_TO_TICKS(samplePeriod - t1));
             }
         }
+        // Window ready -> signal Core 1
+        xSemaphoreGive(xDataReadySemaphore);
     }
-    float accuracy = (float)correct / total * 100.0;
-    Serial.print("\nTotal Accuracy: ");
-    Serial.print(accuracy);
-    Serial.println("%");
 }
 
-//Task2code: Move servo motor based on scenario selected
 void
 Task2code(void* pvParameters) {
-    unsigned long interval = random(5000, 120000); // Move random every 5 seconds - 2 minutes
-
+    long iteration = 0;
     for (;;) {
-        unsigned long currentMillis = millis();
-        if (scenario == 1) {   // No movement detection
-            myServo.write(90); // Move to neutral position
-
-        } else if (scenario == 2) {
-            if (currentMillis - previousMillis >= interval) {
-                previousMillis = currentMillis;                 // Reset timer only after execution
-                int newAngle = random(0, 21);                   // Random angle between 0 and 20 degrees
-                int tempPosition = initial_position + newAngle; // Calculate new position
-                myServo.write(tempPosition);                    // Move to random position
-                int ticks = random(900, 4000);                  // Wait random from 900 ms - 2 seconds
-                vTaskDelay(
-                    pdMS_TO_TICKS(ticks)); // **Use vTaskDelay instead of delay() on multiprocessing** wait milliseconds
-                myServo.write(initial_position); // Return to the last known position
+        // Wait until Task1 signals new data
+        if (xSemaphoreTake(xDataReadySemaphore, portMAX_DELAY) == pdTRUE) {
+            int selectedFeatures[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                      20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+                                      39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+                                      58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75};
+            int numFeatures = sizeof(selectedFeatures) / sizeof(selectedFeatures[0]);
+            float values[numFeatures];
+            for (int i = 0; i < numFeatures; i++) {
+                values[i] = computeFeature(selectedFeatures[i]);
             }
-        }
 
-        else if (scenario == 3 || scenario == 4
-                 || scenario == 5) { // Moving gradually from 85° to 45° with servo steps per minute
-            if (scenario == 4) {
-                step = 2; // Decrease position by 2 servo steps per minute
-            } else if (scenario == 5) {
-                step = 3; // Decrease position by 3 servo steps per minute
+            predicted = model.predict(values);
+            snprintf(packetBuffer, sizeof(packetBuffer), "\nIteration %ld - Prediction result: %d\n", iteration,
+                     predicted);
+
+            if (udp.beginPacket(udpAddress, udpPort)) {
+                udp.write((uint8_t*)packetBuffer, strlen(packetBuffer));
+                udp.endPacket();
             } else {
-                step = 1; // Decrease position by 1 servo steps per minute
+                Serial.println("UDP beginPacket failed!");
             }
-            if (last_position > min_position) {
-                new_position = --last_position;   // Decrease position by 1 servo step
-                myServo.write(new_position);      // Move the servo
-                last_position = new_position;     // Update last position
-                int ticks = 60000 / step;         // Calculate time in ms to wait per step
-                vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait milliseconds per step value
-
-                if (last_position == min_position) {
-                    last_position = initial_position; // Reset last position to initial position
-                    myServo.write(initial_position);  // Return to the last known position
-                }
-
-                if (scenario == 5) { // Anomaly detection and random movement
-                    if (currentMillis - previousMillis >= interval) {
-                        previousMillis = currentMillis;              // Reset timer only after execution
-                        int newAngle = random(0, 21);                // Random angle between 0 and 20 degrees
-                        int tempPosition = last_position + newAngle; // Add random angle to last position
-                        myServo.write(tempPosition);                 // Move to random position
-                        int ticks = random(900, 4000);               // Wait random from 900 ms - 2 seconds
-                        vTaskDelay(pdMS_TO_TICKS(ticks));            // Wait milliseconds
-                        myServo.write(initial_position);             // Return to the last known position
-                        last_position = initial_position;            // Reset last position to initial position
-                    }
-                }
-            }
+            Serial.printf("\n%s", packetBuffer);
+            iteration++;
         }
     }
 }
@@ -611,19 +474,22 @@ Task2code(void* pvParameters) {
 // Try to initialize servo and mpu6050!
 void
 setup() {
-    Serial.begin(115200);     // Start serial communication at 115200 baud rate
-    setCpuFrequencyMhz(240);  // Sets the CPU frequency to 240 MHz
-    setChoiceNum();           // Set choice_num based on scenario and axis
-    initializeTestArray();    // Initialize y_test array with choice_num
-    myServo.attach(servoPin); // Attach servo to pin 25 or D2
-    if (scenario == 1) {
-        myServo.write(90); // Set neutral position for no movement detection
-    } else {
-        myServo.write(initial_position); // Set initial position
-    }
-    randomSeed(analogRead(A0)); // Seed signals from port for random numbers
+    Serial.begin(115200);    // Start serial communication at 115200 baud rate
+    setCpuFrequencyMhz(240); // Sets the CPU frequency to 240 MHz
 
     Serial.println("Wearable Posture Detection System, version:, author: ACHILLIOS PITTSILKAS");
+
+    // WiFi Setup
+    Serial.println("\nConnecting to WiFi...");
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nWiFi connected!");
+    Serial.print("ESP32 IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.printf("Sending data to: %s:%d\n", udpAddress, udpPort);
 
     // MPU6050 Setup using Adafruit Library
     if (!mpu.begin()) {
@@ -667,7 +533,17 @@ setup() {
     }
 
     Serial.println("");
+    Serial.println("");
     delay(100);
+
+    // Create binary semaphore used to signal when a window of data is ready
+    xDataReadySemaphore = xSemaphoreCreateBinary();
+    if (xDataReadySemaphore == NULL) {
+        Serial.println("Failed to create semaphore");
+        while (1) {
+            delay(10);
+        }
+    }
 
     // Create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
     xTaskCreatePinnedToCore(Task1code, /* Task function. */
@@ -678,7 +554,6 @@ setup() {
                             &Task1,    /* Task handle to keep track of created task */
                             0);        /* pin task to core 0 */
     delay(100);
-
     // Create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
     xTaskCreatePinnedToCore(Task2code, /* Task function. */
                             "Task2",   /* name of task. */
@@ -688,9 +563,9 @@ setup() {
                             &Task2,    /* Task handle to keep track of created task */
                             1);        /* pin task to core 1 */
     // Disable watchdog on the current task (core 0 Task1)
-    disableCore0WDT();
+    //disableCore0WDT();
     //disableCore1WDT();
-    esp_task_wdt_deinit(); // fully stop WDT globally (debug only!)
+    //esp_task_wdt_deinit(); // fully stop WDT globally (debug only!)
     delay(100);
 }
 

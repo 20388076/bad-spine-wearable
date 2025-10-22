@@ -9,8 +9,8 @@ clc; clear; close all;
 fprintf('\nLoading datasets...\n');
 
 % Load training and testing datasets
-X_train = readmatrix('X_data_9.71DT.csv');
-y_train = readmatrix('y_data_9.71DT.csv');
+X_train = readmatrix('X_train_9.71DT.csv');
+y_train = readmatrix('y_train_9.71DT.csv');
 X_test  = readmatrix('X_test_9.71DT.csv');
 y_test  = readmatrix('y_test_9.71DT.csv');
 

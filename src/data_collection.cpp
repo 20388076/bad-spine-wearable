@@ -7,13 +7,13 @@
 
 Adafruit_MPU6050 mpu;
 
-const char* ssid = "ssid-here";
-const char* password = "password-here";
-const char* udpAddress = "10.178.91.19"; //  PC's IP address (ipconfig on cmd)
+const char* ssid = "Oiko-Net 5os";
+const char* password = "2107700170";
+const char* udpAddress = "192.168.1.183"; //  PC's IP address (ipconfig on cmd)
 const int udpPort = 12345;
 
 WiFiUDP udp;
-char packetBuffer[256];
+char packetBuffer[265];
 
 float t;                                         // Measurements computation time variable
 unsigned long start;                             // Start time variable

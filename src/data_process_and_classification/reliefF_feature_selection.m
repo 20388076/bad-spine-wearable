@@ -1,4 +1,4 @@
-function relieff_feature_selection(rateStr,classifier,window)
+function relieff_feature_selection(rateStr,classifier,window,dataFolder,outFolder,Xfname,yfname)
     % Convert inputs to string
     rateStr    = string(rateStr);
     classifier = string(classifier);
@@ -10,15 +10,15 @@ function relieff_feature_selection(rateStr,classifier,window)
     end
 
     % Define the folder where the files are stored
-    dataFolder = fullfile('4_FEATS_COMBINED', rateStr + '_Hz_sampling', classifier);
-    outFolder  = fullfile('5_FEATS_SELECTION', rateStr + '_Hz_sampling', classifier);
+    % dataFolder = fullfile('4_FEATS_COMBINED', rateStr + '_Hz_sampling', classifier, 'EXP');
+    % outFolder  = fullfile('5_FEATS_SELECTION', rateStr + '_Hz_sampling', classifier);
 
 
     % Build full paths
     baseName = rateStr + classifier;
 
-    Xfile = fullfile(dataFolder, 'X_data_' + baseName + '.csv');
-    yfile = fullfile(dataFolder, 'y_data_' + baseName + '.csv');
+    Xfile = fullfile(dataFolder, Xfname);
+    yfile = fullfile(dataFolder, yfname);
 
     % Import data
     X = single(round(readmatrix(Xfile, 'NumHeaderLines', 1), 3));
