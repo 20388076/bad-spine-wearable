@@ -94,7 +94,7 @@ More specific, based the workflow that it must be following, each program execut
 ## 📝 Notes
 
 - For Conda users:
-  After adding new packages, re-export the environment: conda env export --from-history > environment.yml
+  After adding new packages, re-export the environment: conda env export > environment.yml
 
 - For pip users:
   After adding new packages, update: pip freeze > requirements.txt
