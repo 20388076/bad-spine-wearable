@@ -407,8 +407,8 @@ def stage_1(mode):
         
         # Normalize acceleration to acceleration in g (9.80665 m/s^2)
         #--------------------------------------------------------------------
-        #df[['ag_x','ag_y','ag_z']] = (df[['a_x','a_y','a_z']] / 9.80665).round(3)
-        df[['ag_x','ag_y','ag_z']] = df[['a_x','a_y','a_z']] 
+        df[['ag_x','ag_y','ag_z']] = (df[['a_x','a_y','a_z']] / 9.80665).round(3)
+        #df[['ag_x','ag_y','ag_z']] = df[['a_x','a_y','a_z']] 
         #--------------------------------------------------------------------
         
         # Compute vector magnitudes
@@ -1407,8 +1407,8 @@ def stage_5(cl, file_index):
             with open(in_file, "w") as f:
                 f.write("#pragma once\n\n")
                 f.write(f"const int SCALER_SIZE = {len(scaler.mean_)};\n")
-                f.write("const float SCALER_MEAN[] = {" + ", ".join(map(str, scaler.mean_)) + "};\n")
-                f.write("const float SCALER_SCALE[] = {" + ", ".join(map(str, scaler.scale_)) + "};\n")
+                f.write("const float SCALER_MEAN[] = {" + ", ".join(map(str, round(scaler.mean_,3))) + "};\n")
+                f.write("const float SCALER_SCALE[] = {" + ", ".join(map(str, round(scaler.scale_,3))) + "};\n")
                 
             print("Scaler parameters exported to include/scaler_params.h")
         # Save the trained model

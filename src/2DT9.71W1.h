@@ -9,24 +9,24 @@ namespace Eloquent {
                     * Predict class for features vector
                     */
                     int predict(float *x) {
-                        if (x[69] <= 687.4985046386719) {
-                            if (x[34] <= 2.325000047683716) {
-                                if (x[21] <= -7.864999771118164) {
-                                    return 2;
-                                }
-
-                                else {
-                                    return 1;
-                                }
+                        if (x[69] <= 7.150000095367432) {
+                            if (x[10] <= 2.191499948501587) {
+                                return 2;
                             }
 
                             else {
-                                if (x[15] <= -6.141000032424927) {
-                                    return 1;
+                                if (x[11] <= 1.2985000014305115) {
+                                    if (x[33] <= 0.625) {
+                                        return 2;
+                                    }
+
+                                    else {
+                                        return 1;
+                                    }
                                 }
 
                                 else {
-                                    return 2;
+                                    return 1;
                                 }
                             }
                         }

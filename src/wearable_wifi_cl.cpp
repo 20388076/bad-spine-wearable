@@ -12,6 +12,7 @@
 #include <Wire.h>              // I2C communication (used by MPU6050)
 #include <algorithm>           // Useful for math/array operations
 #include <iostream>            // Input/output (mainly for debugging with Serial)
+#include "esp_sleep.h"         // ESP32 deep sleep functions
 #include "fft.h"               // Fast Fourier Transform Custom library
 #include "freertos/FreeRTOS.h" // FreeRTOS real-time operating system
 #include "freertos/task.h"     // FreeRTOS task handling (multithreading)
@@ -508,14 +509,52 @@ setup() {
     // WiFi Setup
     Serial.println("\nConnecting to WiFi...");
     WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
+    unsigned long wifiStart = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 10000) {
         delay(500);
         Serial.print(".");
     }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("\nWiFi failed to connect. Sleeping...");
+        esp_sleep_enable_timer_wakeup(10 * 1000000); // Sleep for 10 seconds
+        esp_deep_sleep_start();
+    }
+
     Serial.println("\nWiFi connected!");
     Serial.print("ESP32 IP address: ");
     Serial.println(WiFi.localIP());
-    Serial.printf("Sending data to: %s:%d\n", udpAddress, udpPort);
+
+    // --- Handshake test ---
+    Serial.println("Waiting for PC receiver...");
+    udp.begin(udpPort);
+    udp.beginPacket(udpAddress, udpPort);
+    udp.print("ESP32_HANDSHAKE");
+    udp.endPacket();
+
+    unsigned long startWait = millis();
+    bool handshakeOK = false;
+    while (millis() - startWait < 5000) { // 5s wait for reply
+        int packetSize = udp.parsePacket();
+        if (packetSize) {
+            char reply[32];
+            udp.read(reply, sizeof(reply));
+            reply[packetSize] = '\0';
+            if (String(reply) == "PC_ACK") {
+                handshakeOK = true;
+                break;
+            }
+        }
+        delay(200);
+    }
+
+    if (!handshakeOK) {
+        Serial.println("No receiver found. Going to sleep...");
+        esp_sleep_enable_timer_wakeup(10 * 1000000); // Sleep 10 seconds before retry
+        esp_deep_sleep_start();
+    }
+
+    Serial.println("Receiver active. Continuing normal operation...");
 
     // MPU6050 Setup using Adafruit Library
     if (!mpu.begin()) {

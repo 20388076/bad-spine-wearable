@@ -26,7 +26,7 @@ BUFFER_SIZE = 256   # Buffer size for receiving data
 OUTPUT_DIR = "0_RAW/series_of_experiments_2/9.71_Hz_sampling"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 '''
-Classes =
+files =
 good_1
 good_2
 good_3
@@ -47,11 +47,11 @@ test_bad_2
 test_bad_3
 '''
 sample_rate = 9.71
-Class = 'testing movements'
+file = 'testing movements'
 exp = 'test'
 # Generate filename with timestamp
 #timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-csv_filename = os.path.join(OUTPUT_DIR, f"{Class}_{exp}_{sample_rate}.csv")
+csv_filename = os.path.join(OUTPUT_DIR, f"{file}_{exp}_{sample_rate}.csv")
 
 # Global variables
 sock = None
