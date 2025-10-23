@@ -35,7 +35,7 @@ TaskFunction_t Task1code1, Task1code2;
 #define USE_RAW_DATA 1 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
 
 #if USE_RAW_DATA
-#include "RF9.71W1.h" 
+#include "RF9.71W1.h"
 Eloquent::ML::Port::RandomForest model;
 #else
 #include "DT9.71W1.h" //"Best_DecisionTree.h"
@@ -390,12 +390,12 @@ computeFeature(int featureId) {
         case 2: return vector_magnitude(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
         case 3: return cubic_prod_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
         case 4: return cubic_prod_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
-        case 5: return derivative_max(acc_x_data, WINDOW, sampleRate);
-        case 6: return derivative_max(acc_y_data, WINDOW, sampleRate);
-        case 7: return derivative_max(acc_z_data, WINDOW, sampleRate);
-        case 8: return derivative_max(gyro_x_data, WINDOW, sampleRate);
-        case 9: return derivative_max(gyro_y_data, WINDOW, sampleRate);
-        case 10: return derivative_max(gyro_z_data, WINDOW, sampleRate);
+        case 5: return derivative_max(acc_x_data, WINDOW, samplePeriod);
+        case 6: return derivative_max(acc_y_data, WINDOW, samplePeriod);
+        case 7: return derivative_max(acc_z_data, WINDOW, samplePeriod);
+        case 8: return derivative_max(gyro_x_data, WINDOW, samplePeriod);
+        case 9: return derivative_max(gyro_y_data, WINDOW, samplePeriod);
+        case 10: return derivative_max(gyro_z_data, WINDOW, samplePeriod);
         case 11:
         case 12:
         case 13: {

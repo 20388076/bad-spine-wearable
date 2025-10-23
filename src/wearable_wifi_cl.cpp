@@ -7,13 +7,11 @@
 #include <Adafruit_MPU6050.h>  // Library for MPU6050 accelerometer + gyroscope
 #include <Adafruit_Sensor.h>   // Unified sensor library used by Adafruit sensors
 #include <Arduino.h>           // Core Arduino functions
-#include <ESP32Servo.h>        // Library to control servo motors on ESP32
 #include <WiFi.h>              // WiFi library
 #include <WiFiUdp.h>           // UDP library
 #include <Wire.h>              // I2C communication (used by MPU6050)
 #include <algorithm>           // Useful for math/array operations
 #include <iostream>            // Input/output (mainly for debugging with Serial)
-#include "esp_task_wdt.h"      // Watchdog timer to reset if tasks hang but
 #include "fft.h"               // Fast Fourier Transform Custom library
 #include "freertos/FreeRTOS.h" // FreeRTOS real-time operating system
 #include "freertos/task.h"     // FreeRTOS task handling (multithreading)
@@ -34,14 +32,24 @@ TaskFunction_t Task1code1, Task1code2;
 
 /* Include the Classification model file */
 
-#define USE_RAW_DATA 1 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
+#define USE_RAW_DATA 0 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
 
 #if USE_RAW_DATA
-#include "RF9.71W1.h"
+#include "2RF9.71W1.h"
 Eloquent::ML::Port::RandomForest model;
+#include "2best_fft_indexRF.h"
+#define USE_SCALER 1 // set to 0 to disable feature scaling
+#if USE_SCALER
+#include "2scaler_paramsRF.h"
+#endif
 #else
-#include "DT9.71W1.h" //"Best_DecisionTree.h"
+#include "2DT9.71W1.h" //"Best_DecisionTree.h"
 Eloquent::ML::Port::DecisionTree model;
+#include "2best_fft_indexDT.h"
+#define USE_SCALER 0 // set to 0 to disable feature scaling
+#if USE_SCALER
+#include "2scaler_paramsDT.h"
+#endif
 #endif
 
 // Sampling configuration
@@ -64,6 +72,20 @@ const int udpPort = 12345;
 WiFiUDP udp;
 char packetBuffer[256]; // Buffer to hold outgoing packets
 
+/* Feature Scaling Function */
+#if USE_SCALER
+void
+standardize_features(float* features, int len) {
+    for (int i = 0; i < len; i++) {
+        // Safety check: avoid division by zero
+        if (SCALER_SCALE[i] != 0.0f) {
+            features[i] = (features[i] - SCALER_MEAN[i]) / SCALER_SCALE[i];
+        }
+    }
+}
+#endif
+
+/* Feature Extraction Variables and Functions */
 float acc_x_data[WINDOW], acc_y_data[WINDOW], gyro_y_data[WINDOW], gyro_z_data[WINDOW], gyro_x_data[WINDOW],
     acc_z_data[WINDOW];                          // data arrays
 const float G_CONST = 9.80665f;                  // Standard gravity
@@ -323,29 +345,20 @@ compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& 
 float
 computeFeature(int featureId) {
     switch (featureId) {
+        float tx, ty, tz;
         case 1: return vector_magnitude(acc_x_data, acc_y_data, acc_z_data, WINDOW);
         case 2: return vector_magnitude(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
         case 3: return cubic_prod_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
         case 4: return cubic_prod_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
-        case 5: return derivative_max(acc_x_data, WINDOW, sampleRate);
-        case 6: return derivative_max(acc_y_data, WINDOW, sampleRate);
-        case 7: return derivative_max(acc_z_data, WINDOW, sampleRate);
-        case 8: return derivative_max(gyro_x_data, WINDOW, sampleRate);
-        case 9: return derivative_max(gyro_y_data, WINDOW, sampleRate);
-        case 10: return derivative_max(gyro_z_data, WINDOW, sampleRate);
-        case 11:
-        case 12:
-        case 13: {
-            float tx, ty, tz;
-            compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, tx, ty, tz);
-            if (featureId == 11) {
-                return tx;
-            }
-            if (featureId == 12) {
-                return ty;
-            }
-            return tz;
-        }
+        case 5: return derivative_max(acc_x_data, WINDOW, samplePeriod);
+        case 6: return derivative_max(acc_y_data, WINDOW, samplePeriod);
+        case 7: return derivative_max(acc_z_data, WINDOW, samplePeriod);
+        case 8: return derivative_max(gyro_x_data, WINDOW, samplePeriod);
+        case 9: return derivative_max(gyro_y_data, WINDOW, samplePeriod);
+        case 10: return derivative_max(gyro_z_data, WINDOW, samplePeriod);
+        case 11: compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, tx, ty, tz); return tx;
+        case 12: return ty;
+        case 13: return tz;
         case 14: return window_mean(acc_x_data, WINDOW);
         case 15: return window_max(acc_x_data, WINDOW);
         case 16: return window_min(acc_x_data, WINDOW);
@@ -445,6 +458,13 @@ Task2code(void* pvParameters) {
     for (;;) {
         // Wait until Task1 signals new data
         if (xSemaphoreTake(xDataReadySemaphore, portMAX_DELAY) == pdTRUE) {
+            /*// Optional: print raw data for debugging
+            for (int i = 0; i < WINDOW; i++) {
+                Serial.printf("%.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n", acc_x_data[i], acc_y_data[i], acc_z_data[i],
+                              gyro_x_data[i], gyro_y_data[i], gyro_z_data[i]);
+            }
+            Serial.println();
+            */
             int selectedFeatures[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
                                       20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
                                       39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
@@ -454,7 +474,13 @@ Task2code(void* pvParameters) {
             for (int i = 0; i < numFeatures; i++) {
                 values[i] = computeFeature(selectedFeatures[i]);
             }
+            // Optional: print raw features if debugging
+            // for (int i = 0; i < numFeatures; i++) Serial.println(values[i]);
 
+#if USE_SCALER
+            // Apply StandardScaler normalization (same as in Python)
+            standardize_features(values, numFeatures);
+#endif
             predicted = model.predict(values);
             snprintf(packetBuffer, sizeof(packetBuffer), "\nIteration %ld - Prediction result: %d\n", iteration,
                      predicted);
@@ -562,10 +588,7 @@ setup() {
                             1,         /* priority of the task */
                             &Task2,    /* Task handle to keep track of created task */
                             1);        /* pin task to core 1 */
-    // Disable watchdog on the current task (core 0 Task1)
-    //disableCore0WDT();
-    //disableCore1WDT();
-    //esp_task_wdt_deinit(); // fully stop WDT globally (debug only!)
+
     delay(100);
 }
 
