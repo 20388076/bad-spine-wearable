@@ -12,6 +12,7 @@
 #include <Wire.h>              // I2C communication (used by MPU6050)
 #include <algorithm>           // Useful for math/array operations
 #include <iostream>            // Input/output (mainly for debugging with Serial)
+#include "WiFiconectiondata.h" // WiFi connection data
 #include "esp_sleep.h"         // ESP32 deep sleep functions
 #include "fft.h"               // Fast Fourier Transform Custom library
 #include "freertos/FreeRTOS.h" // FreeRTOS real-time operating system
@@ -65,9 +66,6 @@ const int WINDOW =
 
 /* WiFi configuration */
 
-const char* ssid = "Oiko-Net 5os";
-const char* password = "2107700170";
-const char* udpAddress = "192.168.1.183"; //  PC's IP address (ipconfig on cmd)
 const int udpPort = 12345;
 
 WiFiUDP udp;
@@ -410,12 +408,12 @@ computeFeature(int featureId) {
         case 61: return compute_iqr(gyro_x_data, WINDOW);
         case 62: return compute_iqr(gyro_y_data, WINDOW);
         case 63: return compute_iqr(gyro_z_data, WINDOW);
-        case 64: compute_FFT_real(acc_x_data, fft_real, WINDOW); return fft_real[1];
-        case 65: compute_FFT_real(acc_y_data, fft_real, WINDOW); return fft_real[1];
-        case 66: compute_FFT_real(acc_z_data, fft_real, WINDOW); return fft_real[1];
-        case 67: compute_FFT_real(gyro_x_data, fft_real, WINDOW); return fft_real[1];
-        case 68: compute_FFT_real(gyro_y_data, fft_real, WINDOW); return fft_real[1];
-        case 69: compute_FFT_real(gyro_z_data, fft_real, WINDOW); return fft_real[1];
+        case 64: compute_FFT_real(acc_x_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_AG_X];
+        case 65: compute_FFT_real(acc_y_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_AG_Y];
+        case 66: compute_FFT_real(acc_z_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_AG_Z];
+        case 67: compute_FFT_real(gyro_x_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_G_X];
+        case 68: compute_FFT_real(gyro_y_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_G_Y];
+        case 69: compute_FFT_real(gyro_z_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_G_Z];
         case 70: compute_FFT_mag(acc_x_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
         case 71: compute_FFT_mag(acc_y_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
         case 72: compute_FFT_mag(acc_z_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);

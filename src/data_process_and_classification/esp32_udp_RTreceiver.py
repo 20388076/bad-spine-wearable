@@ -4,10 +4,6 @@ Created on Wed Oct 22 18:49:54 2025
 
 @author: AXILLIOS
 """
-
-import socket, os
-OUTPUT_DIR = "0_RAW/series_of_experiments_2/9.71_Hz_sampling/TESTING"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 '''
 files =
 good_1
@@ -36,8 +32,7 @@ Author: AXILLIOS
 Updated by: Teo + ChatGPT
 """
 
-import socket, os, csv, time
-from datetime import datetime
+import socket, os
 
 # === Configuration ===
 OUTPUT_DIR = "0_RAW/series_of_experiments_2/9.71_Hz_sampling/TESTING"
@@ -45,7 +40,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 sample_rate = 9.71
 file = 'evl_good'
-exp = '2'
+exp = '3'
 csv_filename = os.path.join(OUTPUT_DIR, f"TS_{file}_{exp}_{sample_rate}.csv")
 
 UDP_IP = "0.0.0.0"  # Listen on all interfaces
