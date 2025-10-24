@@ -9,4 +9,4 @@ src/data_process_and_classification/3_FEATS
 *.mp4
 *.zip
 *.bin
-src/data_process_and_classification/WiFiconectiondata.h
+src/WiFiconectiondata.h
