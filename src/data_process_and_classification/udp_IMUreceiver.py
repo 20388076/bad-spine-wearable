@@ -47,11 +47,18 @@ test_bad_2
 test_bad_3
 '''
 sample_rate = 9.71
-file = 'testing movements'
-exp = 'test'
+file = 'testii'
+exp = '1'
 # Generate filename with timestamp
 #timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-csv_filename = os.path.join(OUTPUT_DIR, f"{file}_{exp}_{sample_rate}.csv")
+base_filename = f"{file}_{exp}_{sample_rate}.csv"
+csv_filename = os.path.join(OUTPUT_DIR, base_filename)
+# === Auto-increment if file exists ===
+counter = 1
+while os.path.exists(csv_filename):
+    name, ext = os.path.splitext(base_filename)
+    csv_filename = os.path.join(OUTPUT_DIR, f"{name}({counter}){ext}")
+    counter += 1
 
 # Global variables
 sock = None

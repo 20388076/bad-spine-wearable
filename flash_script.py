@@ -20,7 +20,7 @@ for idx, fname in enumerate(files):
 
 # Determine selected file
 target = None
-if choice is None:
+if choice is None or str(choice).strip() == "":
     # If no choice given, error out or pick a default
     print("No custom_choice specified; aborting")
     Exit(1)

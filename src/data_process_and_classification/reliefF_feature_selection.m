@@ -1,5 +1,6 @@
-function relieff_feature_selection(rateStr,classifier,window,dataFolder,outFolder,Xfname,yfname)
+function relieff_feature_selection(series_of_experiments,rateStr,classifier,window,dataFolder,outFolder,Xfname,yfname)
     % Convert inputs to string
+    series_of_experiments = string(series_of_experiments);
     rateStr    = string(rateStr);
     classifier = string(classifier);
     window     = string(window);
@@ -42,7 +43,7 @@ function relieff_feature_selection(rateStr,classifier,window,dataFolder,outFolde
 
     % Define output file
     resultsFile = fullfile(outFolder, ...
-        'Matlab_relieff_feature_indices_weights_' + baseName + window + '.csv');
+        series_of_experiments + 'Matlab_relieff_feature_indices_weights_' + baseName + window + '.csv');
     
     % Save with two columns (idx, weight)
     writematrix(results, resultsFile);

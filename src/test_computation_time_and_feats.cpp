@@ -7,8 +7,10 @@
 // Constants
 // ===========================================
 const float G_CONST = 9.80665f;
-const int WINDOW = 16; // number of samples per window
-const float DT = 103;  // 100 Hz sampling -> 10 ms
+const int WINDOW = 10; // number of samples per window
+// Sampling configuration
+float sampleRate = 9.71f; // Sample rate in Hz       <-- Change this value  according to your needs
+float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
 float times[75];
 float theta_x, theta_y, theta_z;
 // FFT parameters
@@ -29,23 +31,17 @@ float fft_mag_gyro_z[WINDOW];
 // Test Data (from add.txt)
 // Replace these with your full arrays if truncated
 // ===========================================
-float acc_x_data[WINDOW] = {0.192, 0.172, 0.196, 0.182, 0.196, 0.192, 0.165, 0.180,
-                            0.172, 0.180, 0.194, 0.187, 0.196, 0.208, 0.182, 0.199};
+float acc_x_data[WINDOW] = {-2.995, -2.996, -3.021, -2.959, -2.928, -2.887, -2.883, -2.899, -2.921, -2.914};
 
-float acc_y_data[WINDOW] = {0.048, 0.055, 0.043, 0.036, 0.022, 0.045, 0.060, 0.045,
-                            0.034, 0.055, 0.048, 0.045, 0.043, 0.038, 0.038, 0.055};
+float acc_y_data[WINDOW] = {0.484, 0.503, 0.524, 0.56, 0.594, 0.678, 0.67, 0.68, 0.649, 0.627};
 
-float acc_z_data[WINDOW] = {10.362, 10.372, 10.353, 10.372, 10.357, 10.381, 10.364, 10.403,
-                            10.367, 10.364, 10.405, 10.376, 10.400, 10.369, 10.367, 10.362};
+float acc_z_data[WINDOW] = {-9.208, -9.234, -9.201, -9.242, -9.227, -9.266, -9.232, -9.237, -9.22, -9.258};
 
-float gyro_x_data[WINDOW] = {-0.009, -0.009, -0.007, -0.009, -0.009, -0.009, -0.009, -0.009,
-                             -0.009, -0.009, -0.008, -0.009, -0.009, -0.009, -0.007, -0.008};
+float gyro_x_data[WINDOW] = {-0.015, -0.019, -0.035, -0.043, -0.042, -0.033, -0.019, -0.018, -0.015, -0.016};
 
-float gyro_y_data[WINDOW] = {0.015, 0.014, 0.015, 0.015, 0.016, 0.015, 0.014, 0.015,
-                             0.015, 0.015, 0.014, 0.013, 0.014, 0.014, 0.014, 0.015};
+float gyro_y_data[WINDOW] = {0.011, 0.015, 0.031, 0.026, 0.031, 0.021, 0.013, 0.014, 0.011, 0.014};
 
-float gyro_z_data[WINDOW] = {-0.016, -0.017, -0.017, -0.016, -0.017, -0.016, -0.017, -0.017,
-                             -0.017, -0.015, -0.015, -0.017, -0.015, -0.016, -0.016, -0.015};
+float gyro_z_data[WINDOW] = {-0.018, -0.015, -0.01, -0.009, -0.012, -0.008, -0.015, -0.02, -0.023, -0.023};
 
 // ===========================================
 // Features Functions
@@ -258,10 +254,10 @@ cubic_prod_median(float* x, float* y, float* z, int n) {
 
 // ---- Derivative max ----
 float
-derivative_max(float* data, int n, float dt) {
-    float maxv = fabs((data[1] - data[0]) / dt);
+derivative_max(float* data, int n, float samplePeriod) {
+    float maxv = fabs((data[1] - data[0]) / samplePeriod);
     for (int i = 1; i < n; i++) {
-        float v = fabs((data[i] - data[i - 1]) / dt);
+        float v = fabs((data[i] - data[i - 1]) / samplePeriod);
         if (v > maxv) {
             maxv = v;
         }
@@ -275,24 +271,15 @@ compute_thetas(float* ax, float* ay, float* az, int n, float& theta_x, float& th
     float th_x_arr[n], th_y_arr[n], th_z_arr[n];
 
     for (int i = 0; i < n; i++) {
-        float g_mag = std::sqrt(ax[i] * ax[i] + ay[i] * ay[i] + az[i] * az[i]);
-        if (g_mag == 0) {
-            th_x_arr[i] = th_y_arr[i] = th_z_arr[i] = 0.0f;
-            continue;
-        }
+        float g_mag = sqrt(ax[i] * ax[i] + ay[i] * ay[i] + az[i] * az[i]);
 
         float cx = ax[i] / g_mag;
         float cy = ay[i] / g_mag;
         float cz = az[i] / g_mag;
 
-        // clamp for safety
-        cx = std::max(-1.0f, std::min(1.0f, cx));
-        cy = std::max(-1.0f, std::min(1.0f, cy));
-        cz = std::max(-1.0f, std::min(1.0f, cz));
-
-        th_x_arr[i] = std::acos(cx);
-        th_y_arr[i] = std::acos(cy);
-        th_z_arr[i] = std::acos(cz);
+        th_x_arr[i] = acos(cx);
+        th_y_arr[i] = acos(cy);
+        th_z_arr[i] = acos(cz);
     }
 
     // Return median per axis
@@ -360,32 +347,32 @@ setup() {
 
     // --- f5 ---
     start = micros();
-    float f5 = derivative_max(acc_x_data, WINDOW, DT);
+    float f5 = derivative_max(acc_x_data, WINDOW, samplePeriod);
     float t5 = micros() - start;
 
     // --- f6 ---
     start = micros();
-    float f6 = derivative_max(acc_y_data, WINDOW, DT);
+    float f6 = derivative_max(acc_y_data, WINDOW, samplePeriod);
     float t6 = micros() - start;
 
     // --- f7 ---
     start = micros();
-    float f7 = derivative_max(acc_z_data, WINDOW, DT);
+    float f7 = derivative_max(acc_z_data, WINDOW, samplePeriod);
     float t7 = micros() - start;
 
     // --- f8 ---
     start = micros();
-    float f8 = derivative_max(gyro_x_data, WINDOW, DT);
+    float f8 = derivative_max(gyro_x_data, WINDOW, samplePeriod);
     float t8 = micros() - start;
 
     // --- f9 ---
     start = micros();
-    float f9 = derivative_max(gyro_y_data, WINDOW, DT);
+    float f9 = derivative_max(gyro_y_data, WINDOW, samplePeriod);
     float t9 = micros() - start;
 
     // --- f10 ---
     start = micros();
-    float f10 = derivative_max(gyro_z_data, WINDOW, DT);
+    float f10 = derivative_max(gyro_z_data, WINDOW, samplePeriod);
     float t10 = micros() - start;
 
     // --- f11–f13 (thetas already computed) ---
@@ -664,7 +651,7 @@ setup() {
     // --- f66 ---
     start = micros();
     compute_FFT_real(acc_z_data, fft_real_acc_z, WINDOW);
-    float f66 = fft_real_acc_z[8]; //  float f66 = fft_real_acc_z[8]; // first non-DC bin
+    float f66 = fft_real_acc_z[1]; //  float f66 = fft_real_acc_z[8]; // first non-DC bin
     float t66 = micros() - start;
 
     // --- f67 ---

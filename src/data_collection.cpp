@@ -1,18 +1,14 @@
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
-#include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiUdp.h>
-#include <Wire.h>
+#include <Adafruit_MPU6050.h>  // Library for MPU6050 accelerometer + gyroscope
+#include <Adafruit_Sensor.h>   // Unified sensor library used by Adafruit sensors
+#include <Arduino.h>           // Core Arduino functions
+#include <WiFi.h>              // WiFi library
+#include <WiFiUdp.h>           // UDP library
+#include <Wire.h>              // I2C communication (used by MPU6050)
+#include "WiFiconectiondata.h" // WiFi connection data, see Wifi_example.h for details
 
-Adafruit_MPU6050 mpu;
-
-const char* ssid = "Oiko-Net 5os";
-const char* password = "2107700170";
-const char* udpAddress = "192.168.1.183"; //  PC's IP address (ipconfig on cmd)
+Adafruit_MPU6050 mpu; // Object to talk with the MPU6050 sensor
+WiFiUDP udp;          // Object to handle UDP communication
 const int udpPort = 12345;
-
-WiFiUDP udp;
 char packetBuffer[265];
 
 float t;                                         // Measurements computation time variable
@@ -103,118 +99,3 @@ loop() {
     vTaskDelay(pdMS_TO_TICKS(
         samplePeriod - t)); // If e.g sample is at 50 Hz (every 1000/50 = 20 ms - processing time) wait to achieve 50 Hz
 }
-
-/*
-
-static float scratch1[WINDOW];
-static float scratch2[WINDOW];
-// -----------------------------------------------------------------------
-
-int sample_index = 0;
-const float G_CONST = 9.80665f;
-float samplePeriod = round(1000.0 / sampleRate);
-float t1, t2;
-unsigned long start;
-float theta_x, theta_y, theta_z;
-
-// ---- Mean ----
-float window_mean(float* data, int n) {
-    float sum = 0.0f;
-    for (int i = 0; i < n; i++) sum += data[i];
-    return sum / n;
-}
-
-float window_max(float* data, int n) {
-    float m = data[0];
-    for (int i = 1; i < n; i++) if (data[i] > m) m = data[i];
-    return m;
-}
-
-float window_min(float* data, int n) {
-    float m = data[0];
-    for (int i = 1; i < n; i++) if (data[i] < m) m = data[i];
-    return m;
-}
-
-float compute_rms(float* data, int n) {
-    float sum = 0.0f;
-    for (int i = 0; i < n; i++) sum += data[i] * data[i];
-    return sqrt(sum / n);
-}
-
-float compute_var(float* data, int n) {
-    float m = window_mean(data, n);
-    float sum = 0.0f;
-    for (int i = 0; i < n; i++) {
-        float d = data[i] - m;
-        sum += d * d;
-    }
-    return sum / n;
-}
-
-float compute_std(float* data, int n) { return sqrt(compute_var(data, n)); }
-
-float compute_mad(float* data, int n) {
-    float m = window_mean(data, n);
-    float sum = 0.0f;
-    for (int i = 0; i < n; i++) sum += fabs(data[i] - m);
-    return sum / n;
-}
-
-float compute_iqr(float* data, int len) {
-    for (int i = 0; i < len; ++i) scratch1[i] = data[i];
-    std::sort(scratch1, scratch1 + len);
-    float q1_pos = (len - 1) * 0.25f;
-    float q3_pos = (len - 1) * 0.75f;
-    int q1_idx = (int)q1_pos;
-    int q3_idx = (int)q3_pos;
-    float q1 = scratch1[q1_idx] + (scratch1[q1_idx + 1] - scratch1[q1_idx]) * (q1_pos - q1_idx);
-    float q3 = scratch1[q3_idx] + (scratch1[q3_idx + 1] - scratch1[q3_idx]) * (q3_pos - q3_idx);
-    return q3 - q1;
-}
-
-float compute_sma_median(float* ax, float* ay, float* az, int n) {
-    for (int i = 0; i < n; i++) scratch1[i] = fabs(ax[i]) + fabs(ay[i]) + fabs(az[i]);
-    for (int i = 0; i < n - 1; ++i) {
-        for (int j = 0; j < n - i - 1; ++j) {
-            if (scratch1[j] > scratch1[j + 1]) {
-                float tmp = scratch1[j];
-                scratch1[j] = scratch1[j + 1];
-                scratch1[j + 1] = tmp;
-            }
-        }
-    }
-    return scratch1[n / 2];
-}
-
-float compute_median(float* data, int n) {
-    for (int i = 0; i < n; ++i) scratch1[i] = data[i];
-    for (int i = 0; i < n - 1; ++i) {
-        for (int j = 0; j < n - i - 1; ++j) {
-            if (scratch1[j] > scratch1[j + 1]) {
-                float tmp = scratch1[j];
-                scratch1[j] = scratch1[j + 1];
-                scratch1[j + 1] = tmp;
-            }
-        }
-    }
-    if (n % 2 == 0) return (scratch1[n / 2 - 1] + scratch1[n / 2]) / 2.0f;
-    else return scratch1[n / 2];
-}
-
-float vector_magnitude(float* x, float* y, float* z, int n) {
-    for (int i = 0; i < n; ++i) scratch1[i] = sqrtf(x[i]*x[i] + y[i]*y[i] + z[i]*z[i]);
-    return compute_median(scratch1, n);
-}
-
-float cubic_prod_median(float* x, float* y, float* z, int n) {
-    for (int i = 0; i < n; ++i) {
-        float prod = fabsf(x[i]*y[i]*z[i]);
-        scratch1[i] = powf(prod, 1.0f/3.0f);
-    }
-    return compute_median(scratch1, n);
-}
-
-
-
- */

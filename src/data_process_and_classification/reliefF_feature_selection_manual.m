@@ -21,11 +21,13 @@ switch choice
 end
 classifier = 'DT';
 window = '2';
+folders = ['4_FEATS_COMBINED','5_FEATS_SELECTION'];
 % Define the folder where the files are stored
-dataFolder = fullfile('4_FEATS_COMBINED', rateStr + '_Hz_sampling', classifier);
+
+dataFolder = fullfile('4_FEATS_COMBINED'+ rateStr + '_Hz_sampling'+ classifier);
 
 % Output folder
-outFolder  = fullfile('5_FEATS_SELECTION', rateStr + '_Hz_sampling', classifier);
+outFolder  = fullfile('5_FEATS_SELECTION'+ rateStr + '_Hz_sampling'+ classifier);
 
 
 % Build full paths

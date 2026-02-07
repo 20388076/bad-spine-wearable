@@ -35,11 +35,21 @@ TaskFunction_t Task1code1, Task1code2;
 #define USE_RAW_DATA 1 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
 
 #if USE_RAW_DATA
-#include "RF9.71W1.h"
+#include "1RF9.71W1.h"
 Eloquent::ML::Port::RandomForest model;
+#include "1best_fft_indexRF1.h"
+#define USE_SCALER 0 // set to 0 to disable feature scaling
+#if USE_SCALER
+#include "2scaler_paramsRF.h"
+#endif
 #else
-#include "DT9.71W1.h" //"Best_DecisionTree.h"
+#include "2DT9.71W1.h" //"Best_DecisionTree.h"
 Eloquent::ML::Port::DecisionTree model;
+#include "2best_fft_indexDT.h"
+#define USE_SCALER 0 // set to 0 to disable feature scaling
+#if USE_SCALER
+#include "2scaler_paramsDT.h"
+#endif
 #endif
 
 /* User configuration */
@@ -126,6 +136,19 @@ initializeTestArray() {
         y_test[i] = choice_num;
     }
 }
+
+/* Feature Scaling Function */
+#if USE_SCALER
+void
+standardize_features(float* features, int len) {
+    for (int i = 0; i < len; i++) {
+        // Safety check: avoid division by zero
+        if (SCALER_SCALE[i] != 0.0f) {
+            features[i] = (features[i] - SCALER_MEAN[i]) / SCALER_SCALE[i];
+        }
+    }
+}
+#endif
 
 float acc_x_data[WINDOW], acc_y_data[WINDOW], gyro_y_data[WINDOW], gyro_z_data[WINDOW], gyro_x_data[WINDOW],
     acc_z_data[WINDOW];                          // data arrays
@@ -350,10 +373,10 @@ cubic_prod_median(float* x, float* y, float* z, int n) {
 
 // ---- Derivative max ----
 float
-derivative_max(float* data, int n, float sampleRate) {
-    float maxv = fabs((data[1] - data[0]) / sampleRate);
+derivative_max(float* data, int n, float samplePeriod) {
+    float maxv = fabs((data[1] - data[0]) / samplePeriod);
     for (int i = 1; i < n; i++) {
-        float v = fabs((data[i] - data[i - 1]) / sampleRate);
+        float v = fabs((data[i] - data[i - 1]) / samplePeriod);
         if (v > maxv) {
             maxv = v;
         }
@@ -365,22 +388,24 @@ derivative_max(float* data, int n, float sampleRate) {
 void
 compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& theta_x, float& theta_y,
                            float& theta_z) {
-    float g_x, g_y, g_z, g_mag;
-    // ---- Step 1: Mean per axis (already in g-units)
-    g_x = window_mean(ax_g, n);
-    g_y = window_mean(ay_g, n);
-    g_z = window_mean(az_g, n);
+    float th_x_arr[n], th_y_arr[n], th_z_arr[n];
 
-    // ---- Step 2: Gravity magnitude
-    g_mag = sqrt(g_x * g_x + g_y * g_y + g_z * g_z);
+    for (int i = 0; i < n; i++) {
+        float g_mag = sqrt(ax_g[i] * ax_g[i] + ay_g[i] * ay_g[i] + az_g[i] * az_g[i]);
 
-    // ---- Step 3: Compute tilt angles in degrees
-    float cx = g_x / g_mag;
-    float cy = g_y / g_mag;
-    float cz = g_z / g_mag;
-    theta_x = acos(cx);
-    theta_y = acos(cy);
-    theta_z = acos(cz);
+        float cx = ax_g[i] / g_mag;
+        float cy = ay_g[i] / g_mag;
+        float cz = az_g[i] / g_mag;
+
+        th_x_arr[i] = acos(cx);
+        th_y_arr[i] = acos(cy);
+        th_z_arr[i] = acos(cz);
+    }
+
+    // Return median per axis
+    theta_x = compute_median(th_x_arr, n);
+    theta_y = compute_median(th_y_arr, n);
+    theta_z = compute_median(th_z_arr, n);
 }
 
 float
@@ -521,7 +546,10 @@ Task1code(void* pvParameters) {
                 for (int i = 0; i < numFeatures; i++) {
                     values[i] = computeFeature(selectedFeatures[i]);
                 }
-
+#if USE_SCALER
+                // Apply StandardScaler normalization (same as in Python)
+                standardize_features(values, numFeatures);
+#endif
                 int predicted = model.predict(values);
 
                 Serial.printf("\nIteration %ld/%ld - Prediction result: %d\n", iteration, MAX_RESULTS, predicted);

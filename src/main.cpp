@@ -1,121 +1,180 @@
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
-#include <Arduino.h>
-#include <ESP32Servo.h>
-#include <Wire.h>
-#include <algorithm>
-#include <iostream>
-#include "fft.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+/*****************************************************
+ *  Include Required Libraries
+ *  These libraries let the ESP32 communicate with 
+ *  the MPU6050 sensor, control the servo motor,
+ *  and use FreeRTOS for multitasking.
+ *****************************************************/
+#include <Adafruit_MPU6050.h>  // Library for MPU6050 accelerometer + gyroscope
+#include <Adafruit_Sensor.h>   // Unified sensor library used by Adafruit sensors
+#include <Arduino.h>           // Core Arduino functions
+#include <WiFi.h>              // WiFi library
+#include <WiFiUdp.h>           // UDP library
+#include <Wire.h>              // I2C communication (used by MPU6050)
+#include <algorithm>           // Useful for math/array operations
+#include <iostream>            // Input/output (mainly for debugging with Serial)
+#include "WiFiconectiondata.h" // WiFi connection data
+#include "esp_sleep.h"         // ESP32 deep sleep functions
+#include "fft.h"               // Fast Fourier Transform Custom library
+#include "freertos/FreeRTOS.h" // FreeRTOS real-time operating system
+#include "freertos/task.h"     // FreeRTOS task handling (multithreading)
 
-#define USE_RAW_DATA 1 // Set to 0 for raw data, 1 for RELIEF features
+/*****************************************************
+ *  Hardware and Task Declarations
+ *  Here we create objects for the MPU6050 sensor, 
+ *  the servo motor, and FreeRTOS task handles.
+ *****************************************************/
 
-#if USE_RAW_DATA
-#include "DecisionTree_RELIFF_FEATURES_10_Best.h"
-Eloquent::ML::Port::DecisionTree model;
-#else
-#include "DecisionTree_ONLY_RAW_DATA.h"
-Eloquent::ML::Port::DecisionTree model;
-#endif
+Adafruit_MPU6050 mpu; // Object to talk with the MPU6050 sensor
+SemaphoreHandle_t xDataReadySemaphore = NULL;
 
-#define FFT_N 16 // Must be a power of 2 
-
-Adafruit_MPU6050 mpu;
-Servo myServo;
-
+// Task handles let us run two different pieces of code in "parallel"
+// (FreeRTOS allows multitasking on ESP32)
 TaskHandle_t Task1, Task2;
 TaskFunction_t Task1code1, Task1code2;
 
-// This code is for a wearable posture detection system using an ESP32, MPU6050 sensor, and a servo motor.
-// Varables Initialization
+/* Include the Classification model file */
 
-int initial_position = 85;      // Start at 85 degrees
-int min_position = 45;          // Minimum position of servo motor
-int randomMoves = 10;           // Number of random movements
-int senario = 3;                // Senario of expirament 1-3
-static const int servoPin = 25; // Connect servo to pin 25 or D2
-unsigned long previousMillis = 0;
-int new_position = 0;                 // New position for servo motor
-int last_position = initial_position; // Last position of servo motor
-int step = 1;                         // Factor to decrease position by degrees per miniute
-int anomaly = 0;                      // Anomaly detection flag
-int data_flag = 0;                    // Data flag to indicate data choice
-int sample_index = 0;
+#define USE_RAW_DATA 0 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
 
-float acc_x_data[32], acc_y_data[32], gyro_y_data[32], gyro_z_data[32], gyro_x_data[32], acc_z_data[32];
+#if USE_RAW_DATA
+#include "2RF9.71W1.h"
+Eloquent::ML::Port::RandomForest model;
+#include "2best_fft_indexRF1.h"
+#define USE_SCALER 0 // set to 0 to disable feature scaling
+#if USE_SCALER
+#include "2scaler_paramsRF1.h"
+#endif
+#else
+#include "2DT9.71W1.h" //"Best_DecisionTree.h"
+Eloquent::ML::Port::DecisionTree model;
+#include "2best_fft_indexDT1.h"
+#define USE_SCALER 0 // set to 0 to disable feature scaling
+#if USE_SCALER
+#include "2scaler_paramsDT1.h"
+#endif
+#endif
 
-int window_size = 32; // Window size
+// Sampling configuration
+float sampleRate = 9.71f; // Sample rate in Hz       <-- Change this value  according to your needs
 
-float
-production_cubic(float x, float y, float z) {
-    float results = 0;
-    float prod = fabs(x * y * z);
-    results = pow(prod, 1.0 / 3);
-    return results;
-}
+const int WINDOW =
+    10; // number of samples per window     <-- Change this value  based on the window size in seconds and sample rate
+// WINDOW = round( sampleRate * window size in seconds)
+// e.g. for 2 second window and sample rate 9.71 Hz, WINDOW = 19
+// e.g. for 2 second window and sample rate 10 Hz, WINDOW = 20
+// e.g. for 2 second window and sample rate 50 Hz, WINDOW = 100
 
-float
-compute_fft_energy(float* magnitude, int len) {
-    float sum = 0;
+/* WiFi configuration */
 
+const int udpPort = 12345;
+
+WiFiUDP udp;
+char packetBuffer[256]; // Buffer to hold outgoing packets
+
+/* Feature Scaling Function */
+#if USE_SCALER
+void
+standardize_features(float* features, int len) {
     for (int i = 0; i < len; i++) {
-        sum += magnitude[i] * magnitude[i];
-    }
-
-    return sum / len;
-}
-
-float
-window_max(float* data, int len) {
-    float max_val = data[0];
-    for (int i = 1; i < len; i++) {
-        if (data[i] > max_val) {
-            max_val = data[i];
+        // Safety check: avoid division by zero
+        if (SCALER_SCALE[i] != 0.0f) {
+            features[i] = (features[i] - SCALER_MEAN[i]) / SCALER_SCALE[i];
         }
     }
-    return max_val;
 }
+#endif
 
+/* Feature Extraction Variables and Functions */
+float acc_x_data[WINDOW], acc_y_data[WINDOW], gyro_y_data[WINDOW], gyro_z_data[WINDOW], gyro_x_data[WINDOW],
+    acc_z_data[WINDOW];                          // data arrays
+const float G_CONST = 9.80665f;                  // Standard gravity
+float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
+float t1, t2;                                    // Measurements computation time variable
+unsigned long start;                             // Start time variable
+float offset = 1; // Offset to achieve desired sample rate (1 = ideal, >1 = more time windows within same sample rate)
+// float fft_real_acc_x[WINDOW], fft_real_gyro_x[WINDOW]; // FFT real parts
+float theta_x, theta_y, theta_z; // tilt angles
+// FFT parameters
+float fft_real[WINDOW];
+float fft_mag[WINDOW];
+volatile int predicted;
+
+/* Features Functions */
+
+// ---- Mean ----
 float
-window_mean(float* data, int len) {
-    float sum = 0;
-    for (int i = 0; i < len; i++) {
+window_mean(float* data, int n) {
+    float sum = 0.0f;
+    for (int i = 0; i < n; i++) {
         sum += data[i];
     }
-    return sum / len;
+    return sum / n;
 }
 
+// ---- Max ----
 float
-window_abs_mean(float* data, int len) {
-    float sum = 0;
-    for (int i = 0; i < len; i++) {
-        sum += fabs(data[i]);
-    }
-    return sum / len;
-}
-
-float
-window_min(float* data, int len) {
-    float min_val = data[0];
-    for (int i = 1; i < len; i++) {
-        if (data[i] < min_val) {
-            min_val = data[i];
+window_max(float* data, int n) {
+    float m = data[0];
+    for (int i = 1; i < n; i++) {
+        if (data[i] > m) {
+            m = data[i];
         }
     }
-    return min_val;
+    return m;
 }
 
+// ---- Min ----
 float
-compute_mad(float* data, int len) {
-    float mean = window_mean(data, len);
-    float sum = 0;
-    for (int i = 0; i < len; i++) {
-        sum += fabs(data[i] - mean);
+window_min(float* data, int n) {
+    float m = data[0];
+    for (int i = 1; i < n; i++) {
+        if (data[i] < m) {
+            m = data[i];
+        }
     }
-    return sum / len;
+    return m;
 }
 
+// ---- RMS ----
+float
+compute_rms(float* data, int n) {
+    float sum = 0.0f;
+    for (int i = 0; i < n; i++) {
+        sum += data[i] * data[i];
+    }
+    return sqrt(sum / n);
+}
+
+// ---- Variance ----
+float
+compute_var(float* data, int n) {
+    float m = window_mean(data, n);
+    float sum = 0.0f;
+    for (int i = 0; i < n; i++) {
+        float d = data[i] - m;
+        sum += d * d;
+    }
+    return sum / n;
+}
+
+// ---- Std ----
+float
+compute_std(float* data, int n) {
+    return sqrt(compute_var(data, n));
+}
+
+// ---- MAD ----
+float
+compute_mad(float* data, int n) {
+    float m = window_mean(data, n);
+    float sum = 0.0f;
+    for (int i = 0; i < n; i++) {
+        sum += fabs(data[i] - m);
+    }
+    return sum / n;
+}
+
+// ---- IQR ----
 float
 compute_iqr(float* data, int len) {
     float sorted[len];
@@ -134,185 +193,322 @@ compute_iqr(float* data, int len) {
     return q3 - q1;
 }
 
-float
-compute_rms(float* data, int len) {
-    float sum = 0;
-    for (int i = 0; i < len; i++) {
-        sum += fabs(data[i] * data[i]);
+// ---- FFT ----
+void
+compute_FFT_real(float* input, float* real_out, int size) {
+    FFT_real myFFT(size);
+    myFFT.setInput(input);
+    myFFT.compute(); // Calculate real and imaginary parts
+
+    float* real = myFFT.getReal();
+
+    for (int i = 0; i < size; ++i) {
+        real_out[i] = real[i];
     }
-    return sqrt(sum / len);
 }
 
+// ---- FFT Energy ----
+// Compute only magnitude
 void
-compute_FFT(float* input, float* real_out, float* magnitude_out, int size) {
+compute_FFT_mag(float* input, float* magnitude_out, int size) {
     FFT_real myFFT(size);
     myFFT.setInput(input);
     myFFT.compute();          // Calculate real and imaginary parts
     myFFT.computeMagnitude(); // Compute magnitude
 
-    float* real = myFFT.getReal();
     float* mag = myFFT.getMagnitude();
 
     for (int i = 0; i < size; ++i) {
-        real_out[i] = real[i];
         magnitude_out[i] = mag[i];
     }
 }
 
-void
-Task1code(void* pvParameters) {
-    for (;;) {
-        sensors_event_t a, g, temp;
-        mpu.getEvent(&a, &g, &temp);
-        sample_index = 0;
-        if (data_flag == 0) {
-            float input_array[6] = {a.acceleration.x, a.acceleration.y, a.acceleration.z, g.gyro.x, g.gyro.y, g.gyro.z};
-            int result = model.predict(input_array);
-            Serial.printf("\nPrediction result: %d\n", result);
+float
+compute_fft_energy(float* magnitude, int len) {
+    float sum = 0;
 
-        } else {
+    for (int i = 0; i < len; i++) {
+        sum += magnitude[i] * magnitude[i];
+    }
 
-            for (int i = 0; i < 32; i++) {
+    return sum / len;
+}
 
-                acc_x_data[i] = a.acceleration.x;
-                acc_y_data[i] = a.acceleration.y;
-                acc_z_data[i] = a.acceleration.z;
-                gyro_x_data[i] = g.gyro.x;
-                gyro_y_data[i] = g.gyro.y;
-                gyro_z_data[i] = g.gyro.z;
-                sample_index = i;
+// ---- SMA median ----
+float
+compute_sma_median(float* ax, float* ay, float* az, int n) {
+    float vals[n];
+    for (int i = 0; i < n; i++) {
+        vals[i] = fabs(ax[i]) + fabs(ay[i]) + fabs(az[i]);
+    }
+    // sort
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (vals[j] > vals[j + 1]) {
+                float tmp = vals[j];
+                vals[j] = vals[j + 1];
+                vals[j + 1] = tmp;
             }
-            /*
-            Serial.println("\n=== data ===\n");
-            for (int i = 0; i < 32; i++) {
-                Serial.printf("%.3f\t", acc_x_data[i]);
-                Serial.printf("%.3f\t", acc_y_data[i]);
-                Serial.printf("%.3f\t", acc_z_data[i]);
-                Serial.printf("%.3f\t", gyro_x_data[i]);
-                Serial.printf("%.3f\t", gyro_y_data[i]);
-                Serial.printf("%.3f\t", gyro_z_data[i]);
-                Serial.println();
-            }
-            */
-            if (sample_index == 31) {
-                float fft_real_acc_y[FFT_N];
-                float fft_mag_acc_y[FFT_N];
-
-                compute_FFT(acc_y_data, fft_real_acc_y, fft_mag_acc_y, FFT_N);
-
-                float fft_real_acc_z[FFT_N];
-                float fft_mag_acc_z[FFT_N];
-
-                compute_FFT(acc_z_data, fft_real_acc_z, fft_mag_acc_z, FFT_N);
-
-                float output_matrix[window_size][10]; // Initialize output matrix
-
-                float f0 = 0, f1 = 0, f2 = 0, f3 = 0, f4[window_size], f5 = 0, f6 = 0, f7[FFT_N], f8 = 0,
-                      f9 = 0; // initialize features
-
-                f0 = window_abs_mean(acc_x_data, window_size) + window_abs_mean(acc_y_data, window_size)
-                     + window_abs_mean(acc_z_data, window_size);     // Signal Magnitude Area Accelerometer
-                f1 = compute_fft_energy(fft_mag_acc_y, window_size); // Energy_acceleration_y
-                f2 = compute_iqr(gyro_z_data, window_size);          // IQR_gyro z
-                f3 = compute_rms(acc_y_data, window_size);           // RMS_acceleration_y
-                for (int i = 0; i < window_size; i++) {
-                    f4[i] = production_cubic(acc_x_data[i], acc_y_data[i],
-                                             acc_z_data[i]); // Acceleration Cubic Product Magnitude
-                }
-                f5 = compute_rms(acc_z_data, window_size); // RMS_acceleration_z
-                f6 = compute_mad(acc_y_data, window_size); // MAD_acceleration y
-                //f7 = fft_real_acc_y;                            // FFT_acceleration y
-                f8 = compute_fft_energy(fft_mag_acc_z, window_size); // Energy_acceleration_z
-                f9 = window_mean(acc_y_data, window_size);           // acceleration_y_window_mean
-
-                // Fill matrix
-                for (int i = 0; i < window_size; i++) {
-
-                    output_matrix[i][0] = f0;                // Signal Magnitude Area Accelerometer
-                    output_matrix[i][1] = f1;                // Energy_acceleration_y
-                    output_matrix[i][2] = f2;                // IQR_gyro z
-                    output_matrix[i][3] = f3;                // RMS_acceleration_y
-                    output_matrix[i][4] = f4[i];             // Acceleration Cubic Product Magnitude
-                    output_matrix[i][5] = f5;                // RMS_acceleration_z
-                    output_matrix[i][6] = f6;                // MAD_acceleration y
-                    output_matrix[i][7] = fft_real_acc_y[i]; // FFT_acceleration y
-                    output_matrix[i][8] = f8;                // Energy_acceleration_z
-                    output_matrix[i][9] = f9;                // acceleration_y_window_mean
-                }
-
-                Serial.println("\n=== Output Matrix (32x10) ===");
-                for (int i = 0; i < window_size; i++) {
-                    for (int j = 0; j < 10; j++) {
-                        Serial.printf("%.3f,", output_matrix[i][j]);
-                    }
-                    Serial.println();
-                }
-
-                /*
-                Serial.println("\n=== FFT_output ===");
-                for (int i = 0; i < FFT_N; i++) {
-                    Serial.printf("%.3f\t", FFT_output[i]);
-                    
-                }
-                */
-                for (int i = 0; i < window_size; i++) {
-                    int result = model.predict(output_matrix[i]);
-                    Serial.printf("\nPrediction result: %d\n", result);
-                }
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(100));
         }
+    }
+    return vals[n / 2];
+}
+
+// ---- Median ----
+float
+compute_median(float* data, int n) {
+    float copy[n];
+    for (int i = 0; i < n; i++) {
+        copy[i] = data[i];
+    }
+
+    // sort copy[] ascending (simple bubble sort for small n=16)
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (copy[j] > copy[j + 1]) {
+                float tmp = copy[j];
+                copy[j] = copy[j + 1];
+                copy[j + 1] = tmp;
+            }
+        }
+    }
+
+    if (n % 2 == 0) {
+        // even count → average middle two
+        return (copy[n / 2 - 1] + copy[n / 2]) / 2.0f;
+    } else {
+        // odd count → take middle
+        return copy[n / 2];
     }
 }
 
-//Task2code: move servo motor randomly in a range of 0-20 degrees
-void
-Task2code(void* pvParameters) {
-    unsigned long interval = random(5000, 120000); // Move random every 5 seconds - 2 minutes
+// ---- Vector Magnitude ----
+float
+vector_magnitude(float* x, float* y, float* z, int n) {
+    float s[n];
+    for (int i = 0; i < n; i++) {
+        // per-sample Euclidean magnitude
+        s[i] = sqrt(x[i] * x[i] + y[i] * y[i] + z[i] * z[i]);
+    }
+    // return the mean magnitude over the window
+    return compute_median(s, n);
+}
 
+// ---- Cubic Product Magnitude ----
+float
+cubic_prod_median(float* x, float* y, float* z, int n) {
+    float sum = 0.0f;
+    float power[n];
+    for (int i = 0; i < n; i++) {
+        float prod = fabs(x[i] * y[i] * z[i]);
+        power[i] = pow(prod, 1.0f / 3.0f);
+    }
+    return compute_median(power, n);
+}
+
+// ---- Derivative max ----
+float
+derivative_max(float* data, int n, float sampleRate) {
+    float maxv = fabs((data[1] - data[0]) / sampleRate);
+    for (int i = 1; i < n; i++) {
+        float v = fabs((data[i] - data[i - 1]) / sampleRate);
+        if (v > maxv) {
+            maxv = v;
+        }
+    }
+    return maxv;
+}
+
+// ---- Gravity vector + tilt angles (theta) ----
+void
+compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& theta_x, float& theta_y,
+                           float& theta_z) {
+    float g_x, g_y, g_z, g_mag;
+    // ---- Step 1: Mean per axis (already in g-units)
+    g_x = window_mean(ax_g, n);
+    g_y = window_mean(ay_g, n);
+    g_z = window_mean(az_g, n);
+
+    // ---- Step 2: Gravity magnitude
+    g_mag = sqrt(g_x * g_x + g_y * g_y + g_z * g_z);
+
+    // ---- Step 3: Compute tilt angles in degrees
+    float cx = g_x / g_mag;
+    float cy = g_y / g_mag;
+    float cz = g_z / g_mag;
+    theta_x = acos(cx);
+    theta_y = acos(cy);
+    theta_z = acos(cz);
+}
+
+float
+computeFeature(int featureId) {
+    switch (featureId) {
+        float tx, ty, tz;
+        case 1: return vector_magnitude(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+        case 2: return vector_magnitude(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+        case 3: return cubic_prod_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+        case 4: return cubic_prod_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+        case 5: return derivative_max(acc_x_data, WINDOW, samplePeriod);
+        case 6: return derivative_max(acc_y_data, WINDOW, samplePeriod);
+        case 7: return derivative_max(acc_z_data, WINDOW, samplePeriod);
+        case 8: return derivative_max(gyro_x_data, WINDOW, samplePeriod);
+        case 9: return derivative_max(gyro_y_data, WINDOW, samplePeriod);
+        case 10: return derivative_max(gyro_z_data, WINDOW, samplePeriod);
+        case 11: compute_gravity_and_thetas(acc_x_data, acc_y_data, acc_z_data, WINDOW, tx, ty, tz); return tx;
+        case 12: return ty;
+        case 13: return tz;
+        case 14: return window_mean(acc_x_data, WINDOW);
+        case 15: return window_max(acc_x_data, WINDOW);
+        case 16: return window_min(acc_x_data, WINDOW);
+        case 17: return window_mean(acc_y_data, WINDOW);
+        case 18: return window_max(acc_y_data, WINDOW);
+        case 19: return window_min(acc_y_data, WINDOW);
+        case 20: return window_mean(acc_z_data, WINDOW);
+        case 21: return window_max(acc_z_data, WINDOW);
+        case 22: return window_min(acc_z_data, WINDOW);
+        case 23: return window_mean(gyro_x_data, WINDOW);
+        case 24: return window_max(gyro_x_data, WINDOW);
+        case 25: return window_min(gyro_x_data, WINDOW);
+        case 26: return window_mean(gyro_y_data, WINDOW);
+        case 27: return window_max(gyro_y_data, WINDOW);
+        case 28: return window_min(gyro_y_data, WINDOW);
+        case 29: return window_mean(gyro_z_data, WINDOW);
+        case 30: return window_max(gyro_z_data, WINDOW);
+        case 31: return window_min(gyro_z_data, WINDOW);
+        case 32: return compute_sma_median(acc_x_data, acc_y_data, acc_z_data, WINDOW);
+        case 33: return compute_sma_median(gyro_x_data, gyro_y_data, gyro_z_data, WINDOW);
+        case 34: return compute_rms(acc_x_data, WINDOW);
+        case 35: return compute_rms(acc_y_data, WINDOW);
+        case 36: return compute_rms(acc_z_data, WINDOW);
+        case 37: return compute_rms(gyro_x_data, WINDOW);
+        case 38: return compute_rms(gyro_y_data, WINDOW);
+        case 39: return compute_rms(gyro_z_data, WINDOW);
+        case 40: return compute_mad(acc_x_data, WINDOW);
+        case 41: return compute_mad(acc_y_data, WINDOW);
+        case 42: return compute_mad(acc_z_data, WINDOW);
+        case 43: return compute_mad(gyro_x_data, WINDOW);
+        case 44: return compute_mad(gyro_y_data, WINDOW);
+        case 45: return compute_mad(gyro_z_data, WINDOW);
+        case 46: return compute_var(acc_x_data, WINDOW);
+        case 47: return compute_var(acc_y_data, WINDOW);
+        case 48: return compute_var(acc_z_data, WINDOW);
+        case 49: return compute_var(gyro_x_data, WINDOW);
+        case 50: return compute_var(gyro_y_data, WINDOW);
+        case 51: return compute_var(gyro_z_data, WINDOW);
+        case 52: return compute_std(acc_x_data, WINDOW);
+        case 53: return compute_std(acc_y_data, WINDOW);
+        case 54: return compute_std(acc_z_data, WINDOW);
+        case 55: return compute_std(gyro_x_data, WINDOW);
+        case 56: return compute_std(gyro_y_data, WINDOW);
+        case 57: return compute_std(gyro_z_data, WINDOW);
+        case 58: return compute_iqr(acc_x_data, WINDOW);
+        case 59: return compute_iqr(acc_y_data, WINDOW);
+        case 60: return compute_iqr(acc_z_data, WINDOW);
+        case 61: return compute_iqr(gyro_x_data, WINDOW);
+        case 62: return compute_iqr(gyro_y_data, WINDOW);
+        case 63: return compute_iqr(gyro_z_data, WINDOW);
+        case 64: compute_FFT_real(acc_x_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_AG_X];
+        case 65: compute_FFT_real(acc_y_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_AG_Y];
+        case 66: compute_FFT_real(acc_z_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_AG_Z];
+        case 67: compute_FFT_real(gyro_x_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_G_X];
+        case 68: compute_FFT_real(gyro_y_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_G_Y];
+        case 69: compute_FFT_real(gyro_z_data, fft_real, WINDOW); return fft_real[FFT_BEST_INDEX_G_Z];
+        case 70: compute_FFT_mag(acc_x_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 71: compute_FFT_mag(acc_y_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 72: compute_FFT_mag(acc_z_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 73: compute_FFT_mag(gyro_x_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 74: compute_FFT_mag(gyro_y_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        case 75: compute_FFT_mag(gyro_z_data, fft_mag, WINDOW); return compute_fft_energy(fft_mag, WINDOW);
+        default: return 0.0f;
+    }
+}
+
+// Task 1: Read MPU6050 data, compute features, and make predictions
+
+void
+Task1code(void* pvParameters) {
     for (;;) {
-        unsigned long currentMillis = millis();
-        if (senario == 1) { // No movement detection
-            // myServo.write(40);
-        } else if (senario == 2) {
-            if (currentMillis - previousMillis >= interval) {
-                previousMillis = currentMillis; // Reset timer only after execution
-                int newAngle = random(0, 21);   // Random angle between 0 and 20 degrees
-                int tempPosition = initial_position + newAngle;
-                myServo.write(tempPosition);      // Move to random position
-                int ticks = random(900, 4000);    // Wait random from 900 ms - 2 seconds
-                vTaskDelay(pdMS_TO_TICKS(ticks)); // **Use vTaskDelay instead of delay()**
-                myServo.write(initial_position);  // Return to the last known position
+        int sample_index = 0;
+        for (int i = 0; i < WINDOW; i++) {
+            start = millis();
+            sensors_event_t a, g, temp;
+            mpu.getEvent(&a, &g, &temp);
+            acc_x_data[i] = a.acceleration.x / G_CONST;
+            acc_y_data[i] = a.acceleration.y / G_CONST;
+            acc_z_data[i] = a.acceleration.z / G_CONST;
+            gyro_x_data[i] = g.gyro.x;
+            gyro_y_data[i] = g.gyro.y;
+            gyro_z_data[i] = g.gyro.z;
+
+            if (i < WINDOW - 1) {
+                t1 = millis() - start;
+                vTaskDelay(pdMS_TO_TICKS(samplePeriod - t1));
             }
         }
+        // Window ready -> signal Core 1
+        xSemaphoreGive(xDataReadySemaphore);
+    }
+}
 
-        else if (senario == 3) { // Moning gradually from 85° to 45° with 1 servo step
-            if (last_position > min_position) {
-                new_position = --last_position;   // Decrease position by 1 servo step
-                myServo.write(new_position);      // Move the servo
-                last_position = new_position;     // Update last position
-                int ticks = 60000 / step;         // Calculate time in ms to wait per step
-                vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait milliseconds per step value
-
-                if (last_position == min_position) {
-                    last_position = initial_position; // Reset last position to initial position
-                    myServo.write(initial_position);  // Return to the last known position
-                }
-
-                if (anomaly == 1) {
-                    if (currentMillis - previousMillis >= interval) {
-                        previousMillis = currentMillis; // Reset timer only after execution
-                        int newAngle = random(0, 21);   // Random angle between 0 and 20 degrees
-                        int tempPosition = last_position + newAngle;
-                        myServo.write(tempPosition);      // Move to random position
-                        int ticks = random(900, 4000);    // Wait random from 900 ms - 2 seconds
-                        vTaskDelay(pdMS_TO_TICKS(ticks)); // **Use vTaskDelay instead of delay()**
-                        myServo.write(initial_position);  // Return to the last known position
-                        last_position = initial_position; // Reset last position to initial position
-                    }
-                }
+void
+Task2code(void* pvParameters) {
+    long iteration = 0;
+    float t3, t2, t1;
+    unsigned long start;
+    for (;;) {
+        // Wait until Task1 signals new data
+        if (xSemaphoreTake(xDataReadySemaphore, portMAX_DELAY) == pdTRUE) {
+            /*// Optional: print raw data for debugging
+            for (int i = 0; i < WINDOW; i++) {
+                Serial.printf("%.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n", acc_x_data[i], acc_y_data[i], acc_z_data[i],
+                              gyro_x_data[i], gyro_y_data[i], gyro_z_data[i]);
             }
+            Serial.println();
+            */
+            start = millis();
+            int selectedFeatures[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                      20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+                                      39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+                                      58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75};
+            int numFeatures = sizeof(selectedFeatures) / sizeof(selectedFeatures[0]);
+            float values[numFeatures];
+            for (int i = 0; i < numFeatures; i++) {
+                values[i] = computeFeature(selectedFeatures[i]);
+            }
+
+            // Optional: print raw features if debugging
+            // for (int i = 0; i < numFeatures; i++) Serial.println(values[i]);
+
+#if USE_SCALER
+            // Apply StandardScaler normalization (same as in Python)
+            standardize_features(values, numFeatures);
+#endif
+            t1 = millis() - start;
+
+            start = millis();
+            predicted = model.predict(values);
+            t2 = millis() - start;
+
+            start = millis();
+            snprintf(packetBuffer, sizeof(packetBuffer), "\nIteration %ld - Prediction result: %d\n", iteration,
+                     predicted);
+
+            if (udp.beginPacket(udpAddress, udpPort)) {
+                udp.write((uint8_t*)packetBuffer, strlen(packetBuffer));
+                udp.endPacket();
+            } else {
+                Serial.println("UDP beginPacket failed!");
+            }
+            Serial.printf("\n%s", packetBuffer);
+            iteration++;
+            t3 = millis() - start;
+            Serial.printf("\nFeatures extraction time 1: %.0f ms\n", t1);
+            Serial.printf("\nPrediction time 2: %.0f ms\n", t2);
+            Serial.printf("\nWiFi Data sending time 3: %.0f ms\n", t3);
+            Serial.printf(
+                "\n(Features + Prediction + WiFi) Total time for calculation and data sending processes: %0.f ms\n",
+                t3 + t2 + t1);
         }
     }
 }
@@ -320,21 +516,71 @@ Task2code(void* pvParameters) {
 // Try to initialize servo and mpu6050!
 void
 setup() {
-    Serial.begin(115200);
-    myServo.attach(servoPin);        // Attach servo to pin 25 or D2
-    myServo.write(initial_position); // Set initial position
-    randomSeed(analogRead(A0));      // Seed signals from port for random numbers
+    Serial.begin(115200);    // Start serial communication at 115200 baud rate
+    setCpuFrequencyMhz(240); // Sets the CPU frequency to 240 MHz
 
     Serial.println("Wearable Posture Detection System, version:, author: ACHILLIOS PITTSILKAS");
 
+    // WiFi Setup
+    Serial.println("\nConnecting to WiFi...");
+    WiFi.begin(ssid, password);
+    unsigned long wifiStart = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 10000) {
+        delay(500);
+        Serial.print(".");
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("\nWiFi failed to connect. Sleeping...");
+        esp_sleep_enable_timer_wakeup(10 * 1000000); // Sleep for 10 seconds
+        esp_deep_sleep_start();
+    }
+
+    Serial.println("\nWiFi connected!");
+    Serial.print("ESP32 IP address: ");
+    Serial.println(WiFi.localIP());
+
+    // --- Handshake test ---
+    Serial.println("Waiting for PC receiver...");
+    udp.begin(udpPort);
+    udp.beginPacket(udpAddress, udpPort);
+    udp.print("ESP32_HANDSHAKE");
+    udp.endPacket();
+
+    unsigned long startWait = millis();
+    bool handshakeOK = false;
+    while (millis() - startWait < 5000) { // 5s wait for reply
+        int packetSize = udp.parsePacket();
+        if (packetSize) {
+            char reply[32];
+            udp.read(reply, sizeof(reply));
+            reply[packetSize] = '\0';
+            if (String(reply) == "PC_ACK") {
+                handshakeOK = true;
+                break;
+            }
+        }
+        delay(200);
+    }
+
+    if (!handshakeOK) {
+        Serial.println("No receiver found. Going to sleep...");
+        esp_sleep_enable_timer_wakeup(10 * 1000000); // Sleep 10 seconds before retry
+        esp_deep_sleep_start();
+    }
+
+    Serial.println("Receiver active. Continuing normal operation...");
+
+    // MPU6050 Setup using Adafruit Library
     if (!mpu.begin()) {
-        Serial.println("Failed to find MPU6050 chip");
+        Serial.println("Failed to find MPU6050 chip"); // MPU6050 is not connected
         while (1) {
             delay(10);
         }
     }
-    Serial.println("MPU6050 Found!");
+    Serial.println("MPU6050 Found!"); // MPU6050 is connected
 
+    // Set up the accelerometer, gyro ranges and filter bandwidth based on: https://adafruit.github.io/Adafruit_MPU6050/html/class_adafruit___m_p_u6050.html#a1583d1351bb907d3823aee36af0efe5f
     mpu.setAccelerometerRange(
         MPU6050_RANGE_8_G); // Setting accelerometer range of measurements to 8 G maximum acceleration it can be detected
     Serial.print("Accelerometer range set to: ");
@@ -354,7 +600,7 @@ setup() {
         case MPU6050_RANGE_2000_DEG: Serial.println("+- 2000 deg/s"); break;
     }
 
-    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ); // Setting mpu filter bandwidth to 5Hz
+    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ); // Setting mpu low pass filter bandwidth to 5Hz
     Serial.print("Filter bandwidth set to: ");
     switch (mpu.getFilterBandwidth()) {
         case MPU6050_BAND_260_HZ: Serial.println("260 Hz"); break;
@@ -367,27 +613,37 @@ setup() {
     }
 
     Serial.println("");
+    Serial.println("");
     delay(100);
+
+    // Create binary semaphore used to signal when a window of data is ready
+    xDataReadySemaphore = xSemaphoreCreateBinary();
+    if (xDataReadySemaphore == NULL) {
+        Serial.println("Failed to create semaphore");
+        while (1) {
+            delay(10);
+        }
+    }
 
     // Create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
     xTaskCreatePinnedToCore(Task1code, /* Task function. */
                             "Task1",   /* name of task. */
-                            10000,     /* Stack size of task */
+                            20000,     /* Stack size of task */
                             NULL,      /* parameter of the task */
                             1,         /* priority of the task */
                             &Task1,    /* Task handle to keep track of created task */
                             0);        /* pin task to core 0 */
-    delay(500);
-
+    delay(100);
     // Create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
     xTaskCreatePinnedToCore(Task2code, /* Task function. */
                             "Task2",   /* name of task. */
-                            10000,     /* Stack size of task */
+                            20000,     /* Stack size of task */
                             NULL,      /* parameter of the task */
                             1,         /* priority of the task */
                             &Task2,    /* Task handle to keep track of created task */
                             1);        /* pin task to core 1 */
-    delay(500);
+
+    delay(100);
 }
 
 void

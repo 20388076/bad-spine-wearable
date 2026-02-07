@@ -12,7 +12,7 @@
 #include <Wire.h>              // I2C communication (used by MPU6050)
 #include <algorithm>           // Useful for math/array operations
 #include <iostream>            // Input/output (mainly for debugging with Serial)
-#include "WiFiconectiondata.h" // WiFi connection data
+#include "WiFiconectiondata.h" // WiFi connection data, see Wifi_example.h for details
 #include "esp_sleep.h"         // ESP32 deep sleep functions
 #include "fft.h"               // Fast Fourier Transform Custom library
 #include "freertos/FreeRTOS.h" // FreeRTOS real-time operating system
@@ -25,7 +25,8 @@
  *****************************************************/
 
 Adafruit_MPU6050 mpu; // Object to talk with the MPU6050 sensor
-SemaphoreHandle_t xDataReadySemaphore = NULL;
+WiFiUDP udp;          // Object to handle UDP communication
+SemaphoreHandle_t xDataReadySemaphore = NULL; 
 
 // Task handles let us run two different pieces of code in "parallel"
 // (FreeRTOS allows multitasking on ESP32)
@@ -35,23 +36,25 @@ TaskFunction_t Task1code1, Task1code2;
 /* Include the Classification model file */
 
 #define USE_RAW_DATA 0 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
-
+#define USE_SCALER   0 // set to 0 to disable feature scaling
 #if USE_RAW_DATA
-#include "2RF9.71W1.h"
-Eloquent::ML::Port::RandomForest model;
-#include "2best_fft_indexRF.h"
-#define USE_SCALER 1 // set to 0 to disable feature scaling
+#include "2best_fft_indexRF1.h" // List of FFT feature indices fpr the RandomForest model
 #if USE_SCALER
-#include "2scaler_paramsRF.h"
+#include "2RF9.71W1scaled.h"   //"Best_RandomForest.h" with scaler
+#include "2scaler_paramsRF1.h" // Scaler parameters for the RandomForest model
+#else
+#include "2RF9.71W1.h" //"Best_RandomForest.h"
 #endif
+Eloquent::ML::Port::RandomForest model;
+#else
+#include "2best_fft_indexDT1.h" // List of FFT feature indices fpr the DecisionTree model
+#if USE_SCALER
+#include "2DT9.71W1scaled.h"   //"Best_DecisionTree.h" with scaler
+#include "2scaler_paramsDT1.h" // Scaler parameters for the DecisionTree model
 #else
 #include "2DT9.71W1.h" //"Best_DecisionTree.h"
-Eloquent::ML::Port::DecisionTree model;
-#include "2best_fft_indexDT.h"
-#define USE_SCALER 0 // set to 0 to disable feature scaling
-#if USE_SCALER
-#include "2scaler_paramsDT.h"
 #endif
+Eloquent::ML::Port::DecisionTree model;
 #endif
 
 // Sampling configuration
@@ -65,10 +68,7 @@ const int WINDOW =
 // e.g. for 2 second window and sample rate 50 Hz, WINDOW = 100
 
 /* WiFi configuration */
-
 const int udpPort = 12345;
-
-WiFiUDP udp;
 char packetBuffer[256]; // Buffer to hold outgoing packets
 
 /* Feature Scaling Function */
@@ -91,13 +91,12 @@ const float G_CONST = 9.80665f;                  // Standard gravity
 float samplePeriod = round(1000.0 / sampleRate); // Sample period in ms
 float t1, t2;                                    // Measurements computation time variable
 unsigned long start;                             // Start time variable
-float offset = 1; // Offset to achieve desired sample rate (1 = ideal, >1 = more time windows within same sample rate)
-// float fft_real_acc_x[WINDOW], fft_real_gyro_x[WINDOW]; // FFT real parts
-float theta_x, theta_y, theta_z; // tilt angles
+float theta_x, theta_y, theta_z;                 // tilt angles
 // FFT parameters
 float fft_real[WINDOW];
 float fft_mag[WINDOW];
-volatile int predicted;
+volatile int
+    predicted; // Variable to hold the predicted class label (declared as volatile since it's shared between cores/tasks)
 
 /* Features Functions */
 
@@ -308,10 +307,10 @@ cubic_prod_median(float* x, float* y, float* z, int n) {
 
 // ---- Derivative max ----
 float
-derivative_max(float* data, int n, float sampleRate) {
-    float maxv = fabs((data[1] - data[0]) / sampleRate);
+derivative_max(float* data, int n, float samplePeriod) {
+    float maxv = fabs((data[1] - data[0]) / samplePeriod);
     for (int i = 1; i < n; i++) {
-        float v = fabs((data[i] - data[i - 1]) / sampleRate);
+        float v = fabs((data[i] - data[i - 1]) / samplePeriod);
         if (v > maxv) {
             maxv = v;
         }
@@ -323,22 +322,24 @@ derivative_max(float* data, int n, float sampleRate) {
 void
 compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& theta_x, float& theta_y,
                            float& theta_z) {
-    float g_x, g_y, g_z, g_mag;
-    // ---- Step 1: Mean per axis (already in g-units)
-    g_x = window_mean(ax_g, n);
-    g_y = window_mean(ay_g, n);
-    g_z = window_mean(az_g, n);
+    float th_x_arr[n], th_y_arr[n], th_z_arr[n];
 
-    // ---- Step 2: Gravity magnitude
-    g_mag = sqrt(g_x * g_x + g_y * g_y + g_z * g_z);
+    for (int i = 0; i < n; i++) {
+        float g_mag = sqrt(ax_g[i] * ax_g[i] + ay_g[i] * ay_g[i] + az_g[i] * az_g[i]);
 
-    // ---- Step 3: Compute tilt angles in degrees
-    float cx = g_x / g_mag;
-    float cy = g_y / g_mag;
-    float cz = g_z / g_mag;
-    theta_x = acos(cx);
-    theta_y = acos(cy);
-    theta_z = acos(cz);
+        float cx = ax_g[i] / g_mag;
+        float cy = ay_g[i] / g_mag;
+        float cz = az_g[i] / g_mag;
+
+        th_x_arr[i] = acos(cx);
+        th_y_arr[i] = acos(cy);
+        th_z_arr[i] = acos(cz);
+    }
+
+    // Return median per axis
+    theta_x = compute_median(th_x_arr, n);
+    theta_y = compute_median(th_y_arr, n);
+    theta_z = compute_median(th_z_arr, n);
 }
 
 float
@@ -454,16 +455,19 @@ Task1code(void* pvParameters) {
 void
 Task2code(void* pvParameters) {
     long iteration = 0;
+    float t3, t2, t1;
+    unsigned long start;
     for (;;) {
         // Wait until Task1 signals new data
         if (xSemaphoreTake(xDataReadySemaphore, portMAX_DELAY) == pdTRUE) {
-            /*// Optional: print raw data for debugging
+            /*// Optional: print raw data for debugging volatile shared variable access, print only after data is ready
             for (int i = 0; i < WINDOW; i++) {
                 Serial.printf("%.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n", acc_x_data[i], acc_y_data[i], acc_z_data[i],
                               gyro_x_data[i], gyro_y_data[i], gyro_z_data[i]);
             }
             Serial.println();
             */
+            start = millis();
             int selectedFeatures[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
                                       20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
                                       39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
@@ -473,6 +477,7 @@ Task2code(void* pvParameters) {
             for (int i = 0; i < numFeatures; i++) {
                 values[i] = computeFeature(selectedFeatures[i]);
             }
+
             // Optional: print raw features if debugging
             // for (int i = 0; i < numFeatures; i++) Serial.println(values[i]);
 
@@ -480,7 +485,13 @@ Task2code(void* pvParameters) {
             // Apply StandardScaler normalization (same as in Python)
             standardize_features(values, numFeatures);
 #endif
+            t1 = millis() - start;
+
+            start = millis();
             predicted = model.predict(values);
+            t2 = millis() - start;
+
+            start = millis();
             snprintf(packetBuffer, sizeof(packetBuffer), "\nIteration %ld - Prediction result: %d\n", iteration,
                      predicted);
 
@@ -492,6 +503,13 @@ Task2code(void* pvParameters) {
             }
             Serial.printf("\n%s", packetBuffer);
             iteration++;
+            t3 = millis() - start;
+            Serial.printf("\nFeatures extraction time 1: %.0f ms\n", t1);
+            Serial.printf("\nPrediction time 2: %.0f ms\n", t2);
+            Serial.printf("\nWiFi Data sending time 3: %.0f ms\n", t3);
+            Serial.printf(
+                "\n(Features + Prediction + WiFi) Total time for calculation and data sending processes: %0.f ms\n",
+                t3 + t2 + t1);
         }
     }
 }

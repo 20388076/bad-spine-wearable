@@ -1,10 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 Created on Wed Oct 22 18:49:54 2025
 
 @author: AXILLIOS
 """
+data_colection = 0
 '''
+if data_colection is not 0 then
 files =
 good_1
 good_2
@@ -24,24 +25,44 @@ test_mid_3
 test_bad_1
 test_bad_2
 test_bad_3
+
+else we test the classification results from esp32 inference, so
+files =
+{classifier_name}_good_1
+{classifier_name}_good_2
+{classifier_name}_good_3
+{classifier_name}_mid_1
+{classifier_name}_mid_2
+{classifier_name}_mid_3
+{classifier_name}_bad_1
+{classifier_name}_bad_2
+{classifier_name}_bad_3
 '''
-# -*- coding: utf-8 -*-
-"""
-ESP32 UDP Receiver with CSV logging
-Author: AXILLIOS
-Updated by: Teo + ChatGPT
-"""
+
+
 
 import socket, os
-
+classifier_names = ['DT','RF']
+classifier_name = classifier_names[0]
 # === Configuration ===
-OUTPUT_DIR = "0_RAW/series_of_experiments_2/9.71_Hz_sampling/TESTING"
+OUTPUT_DIR = f"0_RAW/series_of_experiments_2/9.71_Hz_sampling/TESTING_{classifier_name}"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 sample_rate = 9.71
-file = 'evl_good'
+file = 'bad'
 exp = '3'
-csv_filename = os.path.join(OUTPUT_DIR, f"TS_{file}_{exp}_{sample_rate}.csv")
+if data_colection == 0:
+    base_filename = f"{classifier_name}_{file}_{exp}_{sample_rate}.csv"
+else:
+    base_filename = f"{file}_{exp}_{sample_rate}.csv"
+    
+csv_filename = os.path.join(OUTPUT_DIR, base_filename)
+# === Auto-increment if file exists ===
+counter = 1
+while os.path.exists(csv_filename):
+    name, ext = os.path.splitext(base_filename)
+    csv_filename = os.path.join(OUTPUT_DIR, f"{name}({counter}){ext}")
+    counter += 1
 
 UDP_IP = "0.0.0.0"  # Listen on all interfaces
 UDP_PORT = 12345    # Must match the ESP32 UDP port

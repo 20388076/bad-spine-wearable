@@ -1099,7 +1099,7 @@ def stage_5(cl, file_index):
     # ----------------------------------------------------
     
     def capture_output_and_plot(classifier_name, accuracy, Data_tag, 
-                                classifier, X_test, y_test):
+                                classifier, X_test, y_test, normalize_display=True ):
         import io
         from contextlib import redirect_stdout  
         # Original class names from filenames
