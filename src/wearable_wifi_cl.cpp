@@ -26,7 +26,7 @@
 
 Adafruit_MPU6050 mpu; // Object to talk with the MPU6050 sensor
 WiFiUDP udp;          // Object to handle UDP communication
-SemaphoreHandle_t xDataReadySemaphore = NULL; 
+SemaphoreHandle_t xDataReadySemaphore = NULL;
 
 // Task handles let us run two different pieces of code in "parallel"
 // (FreeRTOS allows multitasking on ESP32)
@@ -35,8 +35,8 @@ TaskFunction_t Task1code1, Task1code2;
 
 /* Include the Classification model file */
 
-#define USE_RAW_DATA 0 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
-#define USE_SCALER   0 // set to 0 to disable feature scaling
+#define USE_RAW_DATA 1 // Set to 0 for DecisionTree, 1 for RandomForest RELIEF features
+#define USE_SCALER   1 // set to 0 to disable feature scaling
 #if USE_RAW_DATA
 #include "2best_fft_indexRF1.h" // List of FFT feature indices fpr the RandomForest model
 #if USE_SCALER
@@ -233,24 +233,16 @@ compute_fft_energy(float* magnitude, int len) {
     return sum / len;
 }
 
-// ---- SMA median ----
+// ---- SMA  ----
 float
 compute_sma_median(float* ax, float* ay, float* az, int n) {
     float vals[n];
+    float s = 0;
     for (int i = 0; i < n; i++) {
         vals[i] = fabs(ax[i]) + fabs(ay[i]) + fabs(az[i]);
+        s += vals[i];
     }
-    // sort
-    for (int i = 0; i < n - 1; i++) {
-        for (int j = 0; j < n - i - 1; j++) {
-            if (vals[j] > vals[j + 1]) {
-                float tmp = vals[j];
-                vals[j] = vals[j + 1];
-                vals[j + 1] = tmp;
-            }
-        }
-    }
-    return vals[n / 2];
+    return s / n;
 }
 
 // ---- Median ----
@@ -325,7 +317,7 @@ compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& 
     float th_x_arr[n], th_y_arr[n], th_z_arr[n];
 
     for (int i = 0; i < n; i++) {
-        float g_mag = sqrt(ax_g[i] * ax_g[i] + ay_g[i] * ay_g[i] + az_g[i] * az_g[i]);
+        float g_mag = sqrt((ax_g[i] * ax_g[i]) + (ay_g[i] * ay_g[i]) + (az_g[i] * az_g[i]));
 
         float cx = ax_g[i] / g_mag;
         float cy = ay_g[i] / g_mag;

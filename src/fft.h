@@ -33,9 +33,9 @@ class FFT_real {
             float sum_real = 0.0;
             float sum_imag = 0.0;
             for (int n = 0; n < N; ++n) {
-                float angle = 2.0 * PI * k * n / N;
-                sum_real += input[n] * cos(angle);
-                sum_imag -= input[n] * sin(angle); // Note minus for FFT
+                float angle = TWO_PI * k * n / N;
+                sum_real += input[n] * cosf(angle);
+                sum_imag -= input[n] * sinf(angle); // Note minus for FFT
             }
             real[k] = sum_real;
             imag[k] = sum_imag;

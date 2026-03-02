@@ -47,8 +47,8 @@ test_bad_2
 test_bad_3
 '''
 sample_rate = 9.71
-file = 'testii'
-exp = '1'
+file = 'bad' # e.g. good
+exp = '3' # 1 to create good_1
 # Generate filename with timestamp
 #timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 base_filename = f"{file}_{exp}_{sample_rate}.csv"
@@ -69,7 +69,7 @@ packet_count = 0
 def signal_handler(sig, frame):
     """Handle Ctrl+C gracefully"""
     print("\n\n" + "="*60)
-    print(f"📊 Data Collection Summary")
+    print(" Data Collection Summary")
     print("="*60)
     print(f"Total packets received: {packet_count}")
     print(f"Data saved to: {csv_filename}")
@@ -80,7 +80,7 @@ def signal_handler(sig, frame):
     if sock:
         sock.close()
     
-    print("\n✅ Receiver stopped gracefully. Goodbye!\n")
+    print("\n Receiver stopped gracefully. Goodbye!\n")
     sys.exit(0)
 
 def main():
@@ -90,12 +90,11 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     
     print("="*60)
-    print("🚀 ESP32 Sensor Data Receiver - UDP Mode")
+    print(" ESP32 Sensor Data Receiver - UDP Mode")
     print("="*60)
-    print(f"📡 Listening on: {UDP_IP}:{UDP_PORT}")
-    print(f"💾 Saving data to: {csv_filename}")
-    print("\n⏳ Waiting for data from ESP32...")
-    print("   (Press Ctrl+C to stop)\n")
+    print(f" Listening on: {UDP_IP}:{UDP_PORT}")
+    print(f" Saving data to: {csv_filename}")
+    print("\n Waiting for data from ESP32...")
     print("-"*60)
     
     # Create UDP socket
@@ -110,7 +109,7 @@ def main():
     csv_writer.writerow(['t (ms)', 'a_x', 'a_y', 'a_z', 'g_x', 'g_y', 'g_z'])
     csv_file.flush()
     
-    print("✅ Ready! Listening for incoming data...\n")
+    print(" Ready! Listening for incoming data...\n")
     
     # Main receiving loop
     try:
@@ -133,13 +132,13 @@ def main():
                     
                     # Print progress every 10 packets
                     if packet_count % 10 == 0:
-                        print(f"📦 Received {packet_count} packets | Latest: {data_str}")
+                        print(f" Received {packet_count} packets | Latest: {data_str}")
                     
             except Exception as e:
-                print(f"⚠️  Error parsing data: {e} | Raw data: {data_str}")
+                print(f"  Error parsing data: {e} | Raw data: {data_str}")
                 
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n Error: {e}")
         signal_handler(None, None)
 
 if __name__ == "__main__":

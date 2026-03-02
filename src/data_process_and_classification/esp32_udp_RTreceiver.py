@@ -1,32 +1,10 @@
 """
 Created on Wed Oct 22 18:49:54 2025
 
-@author: AXILLIOS
+@author: AXILL'IOS
 """
-data_colection = 0
+import socket, os
 '''
-if data_colection is not 0 then
-files =
-good_1
-good_2
-good_3
-mid_1
-mid_2
-mid_3
-bad_1
-bad_2
-bad_3
-test_good_1
-test_good_2
-test_good_3
-test_mid_1
-test_mid_2
-test_mid_3
-test_bad_1
-test_bad_2
-test_bad_3
-
-else we test the classification results from esp32 inference, so
 files =
 {classifier_name}_good_1
 {classifier_name}_good_2
@@ -38,23 +16,22 @@ files =
 {classifier_name}_bad_2
 {classifier_name}_bad_3
 '''
+# === User input ===
 
-
-
-import socket, os
 classifier_names = ['DT','RF']
-classifier_name = classifier_names[0]
-# === Configuration ===
-OUTPUT_DIR = f"0_RAW/series_of_experiments_2/9.71_Hz_sampling/TESTING_{classifier_name}"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
+classifier_name = classifier_names[1] # 0 for DT and 1 for RF
+scale = ['Non scaled', 'Scaled']
+normalization = scale[0] # 0 Non scaled data and 1 scaled
 sample_rate = 9.71
-file = 'bad'
-exp = '3'
-if data_colection == 0:
-    base_filename = f"{classifier_name}_{file}_{exp}_{sample_rate}.csv"
+file = 'ts'
+exp = '0'
+# === Configuration ===
+OUTPUT_DIR = f"0_RAW/series_of_experiments_2/9.71_Hz_sampling/TESTING_{classifier_name}/{normalization}"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+if scale == 0:
+    base_filename = f"{classifier_name}_{file}_{exp}_{sample_rate}nsc.csv"
 else:
-    base_filename = f"{file}_{exp}_{sample_rate}.csv"
+    base_filename = f"{classifier_name}_{file}_{exp}_{sample_rate}sc.csv"
     
 csv_filename = os.path.join(OUTPUT_DIR, base_filename)
 # === Auto-increment if file exists ===

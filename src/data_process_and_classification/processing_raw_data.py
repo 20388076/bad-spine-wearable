@@ -43,7 +43,7 @@ cls()
 series_of_experiments = 2 # we have execute 2 different experiments so it's taking 1 or 2 as input values
 # ------------------------------ Auto Runner Option ---------------------------
 # 0: run only one stage; 1: run all stages
-auto = 1
+auto = 0
 # ------------------------------ Data Process Option --------------------------
 # 0: raw -> clean;  
 # 1: clean -> features preprocessed; 
@@ -52,7 +52,7 @@ auto = 1
 # 4: a) X_data_train, y_data_train -> ReliefF selected features or only 
 #    b) Plotting the weight order best features and combine the ESP32 computation time.
 
-stage = 5
+stage = 0
 
 # ----------------------------- Matlab Option for ReleifF ---------------------
 matlab = 1 # 0: python ReleifF ; 1: Matlab ReleifF   
@@ -367,7 +367,7 @@ def stage_0(mode):
                         axs[row, 0].plot(t, ay, 'g', label='Accel Y', alpha=0.7)
                         axs[row, 0].plot(t, az, 'b', label='Accel Z', alpha=0.7)
                     axs[row, 0].set_title(f"{cond.upper()} - Accelerometer")
-                    axs[row, 0].legend(fontsize=8)
+                    #axs[row, 0].legend(fontsize=8)
                     axs[row, 0].set_ylabel('Acceleration (m/s$^2$)', fontsize=9)
                     # Plot gyroscope data
                     for t, gx, gy, gz in all_gyro:
@@ -375,7 +375,7 @@ def stage_0(mode):
                         axs[row, 1].plot(t, gy, 'g', label='Gyro Y', alpha=0.7)
                         axs[row, 1].plot(t, gz, 'b', label='Gyro Z', alpha=0.7)
                     axs[row, 1].set_title(f"{cond.upper()} - Gyroscope")
-                    axs[row, 1].legend(fontsize=8)
+                    # axs[row, 1].legend(fontsize=8)
                     axs[row, 1].set_ylabel('Angular Velocity (deg/s)', fontsize=9)
 
                 # Label bottom row
@@ -1134,7 +1134,6 @@ def stage_5(cl, file_index):
     from scipy.stats import randint
     from micromlgen import port
     from sklearn.metrics import accuracy_score, ConfusionMatrixDisplay 
-    #from sklearn.model_selection import train_test_split
     from sklearn.utils import shuffle
     # ----------------------------------------------------
 
@@ -1171,7 +1170,7 @@ def stage_5(cl, file_index):
         return X_df, y, fNames, Data_tag
     # ----------------------------------------------------
     
-    def capture_output_and_plot(classifier_name, accuracy, Data_tag, 
+    def capture_output_and_plot(classifier_name, accuracy, cv_accuracy, Data_tag, 
                                 classifier, X_test, y_test, plot_name, normalize_display=True):
         import io
         from contextlib import redirect_stdout  
@@ -1188,6 +1187,7 @@ def stage_5(cl, file_index):
             original_class_names = [f'good_{sampleRate}',f'mid_{sampleRate}',f'bad_{sampleRate}']
 
         accuracy = str(round(accuracy * 100, 2))
+        cv_accuracy = str(round(cv_accuracy  * 100, 2))
         buf = io.StringIO()
         with redirect_stdout(buf):
             # Plot confusion matrix image as an example 
@@ -1227,7 +1227,7 @@ def stage_5(cl, file_index):
            
             # Title
             plt.title(f'Series-{series_of_experiments} {classifier_name} Window:{window}sec Confusion Matrix\n' + Data_tag 
-                       + accuracy + '%',  fontsize=16)
+                       + accuracy + '%' + ' with CV accuracy: ' + cv_accuracy + '%',  fontsize=16)
             
             # Improve readability
             plt.tick_params(axis='x', labelsize=10)
@@ -1235,7 +1235,7 @@ def stage_5(cl, file_index):
             
             # Optional: Bold larger numbers or set font size
             for text in disp.ax_.texts:
-                text.set_fontsize(12)  # Increase for better visibility (try 10–12 if need 
+                text.set_fontsize(13)  # Increase for better visibility (try 10–14 if need 
             # Save and show
             plt.savefig(plot_name, dpi=600, bbox_inches='tight')
             plt.tight_layout()
@@ -1256,7 +1256,7 @@ def stage_5(cl, file_index):
     ]
 
     input_file_train = pd.DataFrame([
-        [f"X_data_{sampleRate}{classifier_name1}.csv", f"y_data_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
+        [f"X_data_{sampleRate}{classifier_name1}.csv", f"y_data_{sampleRate}{classifier_name1}.csv", "ALL_FEATURES "],
         [f"all_raw_data_{sampleRate}{classifier_name1}.csv", f"y_all_raw_data_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
         [f"all_norm_data_{sampleRate}{classifier_name1}.csv", f"y_all_norm_data_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
         [f"{series_of_experiments}Matlab_X_data_weight_ordered_{sampleRate}{classifier_name1}.csv", f"y_data_{sampleRate}{classifier_name1}.csv", "WEIGHT BASED FEATURES "],
@@ -1264,7 +1264,7 @@ def stage_5(cl, file_index):
     ], columns=['X_file', 'y_file', 'Data_tag'])
 
     input_file_test = pd.DataFrame([
-        [f"TEST_X_{sampleRate}{classifier_name1}.csv", f"TEST_y_{sampleRate}{classifier_name1}.csv", "ALL_DATA "],
+        [f"TEST_X_{sampleRate}{classifier_name1}.csv", f"TEST_y_{sampleRate}{classifier_name1}.csv", "ALL_FEATURES "],
         [f"TEST_all_raw_data_{sampleRate}{classifier_name1}.csv", f"TEST_y_all_raw_data_{sampleRate}{classifier_name1}.csv", "RAW_DATA "],
         [f"TEST_all_norm_data_{sampleRate}{classifier_name1}.csv", f"TEST_y_all_norm_data_{sampleRate}{classifier_name1}.csv", "G_RAW_DATA "],
         [f"{series_of_experiments}Matlab_TEST_X_weight_ordered_{sampleRate}{classifier_name1}.csv", f"TEST_y_{sampleRate}{classifier_name1}.csv", "WEIGHT BASED FEATURES "],
@@ -1290,13 +1290,14 @@ def stage_5(cl, file_index):
         # Keep feature names as a list of the first 10 names
         fNames = fNames[:feats]
     
-    from sklearn.preprocessing import StandardScaler
-
-    scaler = StandardScaler()
     if series_of_experiments == 2:
         X_train, y_train = shuffle(X_train, y_train, random_state=42)
         print('\n*** Shuffle is setted on ***\n')
-        
+    
+    
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    
     scale = 0
     
     if scale == 1:
@@ -1312,37 +1313,43 @@ def stage_5(cl, file_index):
 
     # Parameter distributions for RandomizedSearchCV
     if classifier_name == 'DT':
-        classifier.set_params(criterion = 'gini', random_state = 42, splitter = 'best') 
+        classifier.set_params(criterion = 'gini', random_state = 42, splitter = 'best', min_impurity_decrease = 0.01) 
         n_iter=100
         
     elif classifier_name == 'RF':
-        classifier.set_params(criterion = 'gini', random_state = 42)
-        n_iter=50
+        classifier.set_params(criterion = 'gini', random_state = 42, min_impurity_decrease = 0.001)
+        n_iter = 50 if series_of_experiments == 1 else 15
         
+    max_depth_range = randint(1, 5) if series_of_experiments == 1 else randint(1, 4)
+    
     param_dists = {
-    'DT': {
-        'max_depth': randint(1,6),
-        'min_samples_split': randint(2, 6),
-        'max_features': randint(1,50)
-        
-    },
-    'RF': {
-        'n_estimators': randint(3, 100),
-        'max_depth': randint(1,6),
-        'min_samples_split': randint(2, 6),
-        'max_features': randint(1,50)
-    }
+        'DT': {
+            'max_depth': max_depth_range,
+            'min_samples_split': randint(2, 6),
+            'max_features': randint(1, 50)
+            
+        },
+        'RF': {
+            'n_estimators': randint(3, 100),
+            'max_depth': max_depth_range,
+            'min_samples_split': randint(2, 3),
+            'max_features': randint(1, 50)
+        }
     }
     
     if series_of_experiments == 1:
         cv =  TimeSeriesSplit(n_splits=5)
     else:
         cv = 5
+        
+    #cv = 5
     if classifier_name == 'DT':
-        classifier.set_params(criterion = 'gini', random_state = 42, splitter = 'best') 
-     
+        classifier.set_params(criterion = 'gini', random_state = 42, splitter = 'best', min_impurity_decrease = 0.01) 
+        n_iter=100
+        
     elif classifier_name == 'RF':
-        classifier.set_params(criterion = 'gini', random_state = 42)
+        classifier.set_params(criterion = 'gini', random_state = 42, min_impurity_decrease = 0.005)
+        n_iter = 50 if series_of_experiments == 1 else 15
      
     search = RandomizedSearchCV(classifier, 
                              param_dists[classifier_name], 
@@ -1427,6 +1434,7 @@ def stage_5(cl, file_index):
     if pl == 1:
         classification_text, image_path = capture_output_and_plot(classifier_name, 
                                                     train_score, 
+                                                    best_cv_score,
                                                     Data_tag, 
                                                     best_model, 
                                                     X_train,
@@ -1434,7 +1442,8 @@ def stage_5(cl, file_index):
                                                     f'{series_of_experiments}{classifier_name}_train_image_{sc}.png', 
                                                     normalize_display=False)
         classification_text, image_path = capture_output_and_plot(classifier_name, 
-                                                    test_score, 
+                                                    test_score,
+                                                    best_cv_score,
                                                     Data_tag, 
                                                     best_model, 
                                                     X_test, 

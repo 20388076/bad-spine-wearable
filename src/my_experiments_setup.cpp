@@ -106,7 +106,7 @@ Task2code(void* pvParameters) {
                 new_position = --last_position;   // Decrease position by 1 servo step
                 myServo.write(new_position);      // Move the servo
                 last_position = new_position;     // Update last position
-                int ticks = 60000 / step;         // Calculate time in ms to wait per step
+                int ticks = 1000 / step;          // Calculate time in ms to wait per step
                 vTaskDelay(pdMS_TO_TICKS(ticks)); // Wait milliseconds per step value
 
                 if (last_position == min_position) {

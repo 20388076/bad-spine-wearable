@@ -15,11 +15,15 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 
 # === CONFIGURATION ===
+sample_rate = 9.71
 classifier_names = ['DT','RF']
-classifier_name = classifier_names[1]
-DATA_PATH = f"0_RAW/series_of_experiments_2/9.71_Hz_sampling/TESTING_{classifier_name}"  # directory with all CSVs
+classifier_name = classifier_names[1]# 0 for DT and 1 for RF
+scale = ['Non scaled', 'Scaled']
+normalization = scale[0] # 0 Non scaled data and 1 scaled
+DATA_PATH = f"0_RAW/series_of_experiments_2/9.71_Hz_sampling/TESTING_{classifier_name}/{normalization}"  # directory with all CSVs
 CLASS_MAP = {"good": 0, "mid": 1, "bad": 2}
 ITERATIONS_TO_KEEP = 59  # number of iterations after the first
+
 # === FUNCTION TO PARSE A SINGLE FILE ===
 def parse_predictions(filepath):
     """
@@ -86,7 +90,7 @@ acc = accuracy_score(combined["true_class"], combined["predicted_class"])
 
 print("=== CONFUSION MATRIX ===")
 print(cm)
-print(f"\n✅ Total Accuracy: {acc * 100:.2f}%")
+print(f"\n Total Accuracy: {acc * 100:.2f}%")
 
 print("\n=== CLASSIFICATION REPORT ===")
 print(classification_report(
@@ -97,7 +101,9 @@ print(classification_report(
 
 # === VISUAL DISPLAY ===
 disp = ConfusionMatrixDisplay(confusion_matrix=cm,
-                              display_labels=["good (0)", "mid (1)", "bad (2)"])
+                              display_labels=["Class 0 (good)", "Class 1 (mid)", "Class 2 (bad)"])
 disp.plot(cmap="Blues", values_format="d")
 plt.title(f"{classifier_name} Confusion Matrix (Total Accuracy: {acc * 100:.2f}%)")
+plot_name = f'CM_{classifier_name}_{sample_rate}_{normalization}.png'
+plt.savefig(plot_name, dpi=600, bbox_inches='tight')
 plt.show()

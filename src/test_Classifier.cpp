@@ -2704,9 +2704,6 @@ setup() {
     for (int i = 0; i < total; i++) {
         float data[75];
         memcpy(data, X_data[i], sizeof(data));
-        for (int i = 0; i < 75; i++) {
-            Serial.printf("%.2f, \n", data[i]);
-        }
         Serial.println();
         int predicted = model.predict(data);
         int actual = y_data[i];

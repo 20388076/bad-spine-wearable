@@ -391,7 +391,7 @@ compute_gravity_and_thetas(float* ax_g, float* ay_g, float* az_g, int n, float& 
     float th_x_arr[n], th_y_arr[n], th_z_arr[n];
 
     for (int i = 0; i < n; i++) {
-        float g_mag = sqrt(ax_g[i] * ax_g[i] + ay_g[i] * ay_g[i] + az_g[i] * az_g[i]);
+        float g_mag = sqrt((ax_g[i] * ax_g[i]) + (ay_g[i] * ay_g[i]) + (az_g[i] * az_g[i]));
 
         float cx = ax_g[i] / g_mag;
         float cy = ay_g[i] / g_mag;
