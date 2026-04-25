@@ -3,10 +3,10 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-src/data_process_and_classification/1_CLEAN
-src/data_process_and_classification/2_FEATS_PREPROCESSSED
-src/data_process_and_classification/3_FEATS
+data/1_CLEAN
+data/2_FEATS_PREPROCESSSED
+data/3_FEATS
 *.mp4
 *.zip
 *.bin
-src/WiFiconectiondata.h
+lib/WiFiconectiondata.h
