@@ -9,4 +9,4 @@ data/3_FEATS
 *.mp4
 *.zip
 *.bin
-lib/WiFiconectiondata.h
+lib/WiFiconectiondata/WiFiconectiondata.h
